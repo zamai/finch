@@ -93,8 +93,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let cfg = NSWorkspace.OpenConfiguration()
-        if !spec.args.isEmpty { cfg.arguments = spec.args }
-        NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: cfg, completionHandler: nil)
+        if spec.args.isEmpty {
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: cfg, completionHandler: nil)
+            return
+        }
+        // macOS drops launch arguments when the app is already running, so a
+        // profile flag would be ignored. Launch a new instance with the URL on
+        // the command line, like `open -n -a <app> --args <args> <url>`;
+        // single-instance browsers (Chrome, Firefox) hand it to the running
+        // process and exit.
+        cfg.arguments = spec.args + [url.absoluteString]
+        cfg.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: appURL, configuration: cfg, completionHandler: nil)
     }
 
     // MARK: - Helpers
