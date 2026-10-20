@@ -43,13 +43,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Hot path
 
     @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+        let trace = RouteTrace()
         guard let raw = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
               let engine else { return }
 
         let opener    = openerBundleId(from: event)
+        trace.mark("opener")
         let modifiers = NSEvent.modifierFlags
+        trace.mark("mods")
 
         let result = engine.resolve(urlString: raw, opener: opener, modifiers: modifiers)
+        trace.mark("resolve")
         // Rules match on bundle id; the menu prefers it too, but falls back to
         // the sender's executable name so a non-app sender reads as "osascript"
         // rather than an unexplained blank.
@@ -57,8 +61,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                original: raw,
                                final: result.url.absoluteString,
                                bundleId: result.browser.bundleId)
-        if result.browser.bundleId.isEmpty { return }   // suppressed (open: null)
-        open(url: result.url, spec: result.browser)
+        trace.mark("record")
+        if result.browser.bundleId.isEmpty {            // suppressed (open: null)
+            trace.emit("from=\(opener) suppressed")
+            return
+        }
+        open(url: result.url, spec: result.browser, trace: trace)
     }
 
     /// Bundle id of the sending app, for `from()` rules and the menu.
@@ -86,15 +94,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return String(cString: buf)
     }
 
-    private func open(url: URL, spec: BrowserSpec) {
+    private func open(url: URL, spec: BrowserSpec, trace: RouteTrace) {
         guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: spec.bundleId) else {
             fputs("finch: browser not found: \(spec.bundleId)\n", stderr)
             NSWorkspace.shared.open(url)
+            trace.emit("notfound=\(spec.bundleId)")
             return
         }
+        trace.mark("lookup")
         let cfg = NSWorkspace.OpenConfiguration()
+        let path = spec.args.isEmpty ? "open" : "newinstance"
+        // The completion handler is where the real answer is: everything above
+        // it is bookkeeping, and `open` only returns once LaunchServices has
+        // handed the URL to the browser process.
+        let done: (NSRunningApplication?, Error?) -> Void = { _, err in
+            trace.mark("handoff")
+            trace.emit("-> \(spec.bundleId) via=\(path)" + (err == nil ? "" : " err=\(err!)"))
+        }
         if spec.args.isEmpty {
-            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: cfg, completionHandler: nil)
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: cfg,
+                                    completionHandler: done)
+            trace.mark("issue")
             return
         }
         // macOS drops launch arguments when the app is already running, so a
@@ -104,7 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // process and exit.
         cfg.arguments = spec.args + [url.absoluteString]
         cfg.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: appURL, configuration: cfg, completionHandler: nil)
+        NSWorkspace.shared.openApplication(at: appURL, configuration: cfg, completionHandler: done)
+        trace.mark("issue")
     }
 
     // MARK: - Helpers
