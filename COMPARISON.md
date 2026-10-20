@@ -131,7 +131,7 @@ the implementation that affect maintainability, performance, and trust.
 | Browser interception API | `NSAppleEventManager` | `NSAppleEventManager` | Electron wrapper | unknown | unknown |
 
 **On the LOC row:** Finch's figure is code only — comments and blank lines
-excluded, reproducible with `make loc` (845 lines total, 648 of them code). The
+excluded, reproducible with `make loc` (1,084 lines total, 806 of them code). The
 Finicky and Browserosaurus figures are raw line counts and have not been
 re-measured the same way, so this row reads more favourably to Finch than a
 like-for-like count would. Treat it as an order-of-magnitude difference, not a

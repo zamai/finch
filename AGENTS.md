@@ -28,6 +28,7 @@ first.
 | cut a release, bump a version, change how Finch is distributed | `docs/homebrew.md` | the two-repo tap layout, why the cask builds from source on the user's machine rather than shipping a binary, and the exact release order — the bundle version is bumped **before** tagging, because the cask builds from the tag's tarball |
 | add a feature, or check whether one exists | `FEATURES.md` | per-feature status, including the ❌ rows that are deliberate non-goals rather than gaps |
 | make a claim about Finch versus an alternative, or quote a number | `COMPARISON.md` | 18 evaluated alternatives, the sources behind each figure, and the caveat on how the line-count row was measured |
+| chase a slow link open, or add a timing measurement | `docs/latency.md` | the measured per-stage cost of a route, which stage actually dominates, and the three hypotheses already tested and ruled out — including why Chrome's `last_used` profile cannot be used to skip the relay |
 | change the architecture, or ask "why JavaScriptCore", "why marker objects" | `docs/architecture.md` | the stated design goal, each key decision with its rationale, the explicit non-goals and the reason behind each, and the macOS platform behaviour the bundle configuration encodes |
 | change config syntax or helper semantics | `examples/finch.example.js`, then README.md § Configuration | the user-facing contract, which is what breaks when the engine changes |
 | touch the bundle, URL schemes, or default-browser candidacy | `Info.plist` | which schemes Finch claims — `http`, `https` and `mailto`, deliberately not the `public.html` document type, for the reason README.md § Install gives — and `LSUIElement` for the no-Dock-icon behaviour |
@@ -43,6 +44,7 @@ first.
 | `Sources/Finch/Loader.swift` | Reads `~/.finch.js` and evaluates it in a JavaScriptCore context |
 | `Sources/Finch/Helpers.swift` | `JS_PRELUDE` — JavaScript injected into every config context: a `URL` polyfill (JavaScriptCore has no DOM, so `URL` does not otherwise exist) and the marker-object helpers `domain`, `from`, `strip` and `running`, which return data rather than functions so `Engine.swift` can compile them to native Swift at load time. `docs/architecture.md` explains why |
 | `Sources/Finch/Recents.swift` | In-memory list of the last few routes shown in the menu bar |
+| `Sources/Finch/Trace.swift` | Per-route latency trace. Marks cost integers on the hot path; formatting and IO happen on a utility queue, to `~/.finch.log` and `os_log` (`make trace`) |
 
 ## Not in this repository
 

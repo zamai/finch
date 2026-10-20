@@ -32,6 +32,12 @@ final class RouteTrace {
     private var marks: [(String, UInt64)] = []
     private var lock = os_unfair_lock()
 
+    /// Bundle id of the app the link came from, for grepping the log by sender.
+    var from: String = ""
+
+    /// Receive -> now, in milliseconds.
+    var elapsedMs: Double { Double(monotonicNs() - t0) / 1_000_000 }
+
     init() {
         t0 = monotonicNs()
         wall = Date().timeIntervalSince1970
@@ -51,6 +57,7 @@ final class RouteTrace {
         let marks = self.marks
         os_unfair_lock_unlock(&lock)
         let t0 = self.t0, wall = self.wall
+        let summary = "from=\(from.isEmpty ? "?" : from) " + summary
         Trace.shared.write {
             var line = String(format: "%.6f", wall) + " "
             var prev = t0

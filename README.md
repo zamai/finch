@@ -3,7 +3,7 @@
 A tiny, fast macOS browser router. Set it as your default browser; it routes
 each URL to the right browser based on rules in `~/.finch.js`.
 
-- **~650 LOC** Swift (code only; `make loc`) + a 1.5KB embedded JS URL polyfill
+- **~800 LOC** Swift (code only; `make loc`) + a 1.5KB embedded JS URL polyfill
 - **~5µs** hot-path latency on the common case (well under perceptible)
 - Native `JavaScriptCore`, no bundler, no transpiler, no Electron
 - Config is real JavaScript — simple cases look like data, full power available
@@ -20,7 +20,7 @@ native Swift code so the hot path stays in Swift, not JS.
 
 |                          | **Finch**     | Finicky    | Velja  | Choosy | Browserosaurus |
 |--------------------------|---------------|------------|--------|--------|----------------|
-| Source LOC               | **~650**      | ~2,900     | closed | closed | ~4,200         |
+| Source LOC               | **~800**      | ~2,900     | closed | closed | ~4,200         |
 | Hot-path latency         | **~5 µs**     | unknown    | —      | —      | —              |
 | Memory footprint         | ~17 MB        | ~30 MB     | —      | —      | ~150 MB        |
 | Programmable rules       | ✅            | ✅         | 🚧 URL only | ❌     | ❌             |
@@ -205,11 +205,12 @@ Code lines per file, comments excluded (`make loc` for the total):
 | File | Code | Responsibility |
 |---|---|---|
 | `Sources/Finch/main.swift` | 5 | Bootstrap |
-| `Sources/Finch/AppDelegate.swift` | 174 | Apple Event handler, hot path entry, `NSWorkspace.open`, menu bar |
+| `Sources/Finch/AppDelegate.swift` | 253 | Apple Event handler, hot path entry, browser launch, menu bar |
 | `Sources/Finch/Loader.swift` | 33 | Read `~/.finch.js`, evaluate via JavaScriptCore, return module.exports |
 | `Sources/Finch/Helpers.swift` | 68 | Embedded JS prelude: URL polyfill + `domain`/`from`/`strip`/`running` helpers |
 | `Sources/Finch/Engine.swift` | 348 | Marker compilation + native hot-path resolver |
-| `Sources/Finch/Recents.swift` | 20 | In-memory list of recent routes for the menu bar |
+| `Sources/Finch/Recents.swift` | 29 | In-memory list of recent routes for the menu bar |
+| `Sources/Finch/Trace.swift` | 70 | Per-route latency trace to `~/.finch.log` and `os_log` |
 
 Why it is shaped this way — the decisions, the non-goals and the macOS
 behaviour the bundle depends on — is in
