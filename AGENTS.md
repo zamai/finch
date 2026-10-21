@@ -45,6 +45,7 @@ first.
 | `Sources/Finch/Helpers.swift` | `JS_PRELUDE` — JavaScript injected into every config context: a `URL` polyfill (JavaScriptCore has no DOM, so `URL` does not otherwise exist) and the marker-object helpers `domain`, `from`, `strip` and `running`, which return data rather than functions so `Engine.swift` can compile them to native Swift at load time. `docs/architecture.md` explains why |
 | `Sources/Finch/Recents.swift` | In-memory list of the last few routes shown in the menu bar |
 | `Sources/Finch/Trace.swift` | Per-route latency trace. Marks cost integers on the hot path; formatting and IO happen on a utility queue, to `~/.finch.log` and `os_log` (`make trace`) |
+| `Sources/Finch/Singleton.swift` | Chromium's process-singleton socket protocol. How `--profile-directory` reaches an already-running browser without starting a second one — the single biggest latency win, and the reason to read `docs/latency.md` before touching the open path |
 
 ## Not in this repository
 

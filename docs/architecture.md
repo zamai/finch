@@ -7,7 +7,7 @@ and positioning against alternatives in [COMPARISON.md](../COMPARISON.md).
 ## The design goal, stated so it can fail
 
 Match the expressive power of Finicky — the established macOS browser router —
-while staying small enough to read in a sitting: roughly 800 lines of Swift
+while staying small enough to read in a sitting: roughly 900 lines of Swift
 (`make loc`), a hot path budgeted under 10µs, and a ~17 MB resident footprint.
 The method is to compile config helpers to native Swift at load time instead of
 running a JavaScript bundler pipeline at all.

@@ -9,6 +9,18 @@ module.exports = {
   browsers: {
     zen:    "app.zen-browser.zen",
     prisma: "com.talon-sec.Work",
+
+    // A browser can carry launch args. For Chromium profiles this is the
+    // point: macOS drops launch arguments for an app that is already running,
+    // so Finch delivers them over the browser's process-singleton socket.
+    // `dataDir` (under ~/Library/Application Support) says where to find that
+    // socket, and is only needed for a Chromium browser Finch does not already
+    // know — Chrome, Chromium, Brave, Edge and Vivaldi are built in. Without
+    // it the link still opens, just via a slower second browser process.
+    chromeWork: {
+      id: "com.google.Chrome",
+      args: ["--profile-directory=Profile 1"],
+    },
   },
 
   // Rewrites run in order, all matching ones apply.

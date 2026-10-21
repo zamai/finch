@@ -3,7 +3,7 @@
 A tiny, fast macOS browser router. Set it as your default browser; it routes
 each URL to the right browser based on rules in `~/.finch.js`.
 
-- **~800 LOC** Swift (code only; `make loc`) + a 1.5KB embedded JS URL polyfill
+- **~900 LOC** Swift (code only; `make loc`) + a 1.5KB embedded JS URL polyfill
 - **~5µs** hot-path latency on the common case (well under perceptible)
 - Native `JavaScriptCore`, no bundler, no transpiler, no Electron
 - Config is real JavaScript — simple cases look like data, full power available
@@ -20,7 +20,7 @@ native Swift code so the hot path stays in Swift, not JS.
 
 |                          | **Finch**     | Finicky    | Velja  | Choosy | Browserosaurus |
 |--------------------------|---------------|------------|--------|--------|----------------|
-| Source LOC               | **~800**      | ~2,900     | closed | closed | ~4,200         |
+| Source LOC               | **~900**      | ~2,900     | closed | closed | ~4,200         |
 | Hot-path latency         | **~5 µs**     | unknown    | —      | —      | —              |
 | Memory footprint         | ~17 MB        | ~30 MB     | —      | —      | ~150 MB        |
 | Programmable rules       | ✅            | ✅         | 🚧 URL only | ❌     | ❌             |
@@ -87,6 +87,8 @@ module.exports = {
     zen:    "app.zen-browser.zen",
     prisma: "com.talon-sec.Work",
     chrome: { id: "com.google.Chrome", args: ["--profile-directory=Work"] },
+    // `dataDir` is only needed for a Chromium browser Finch does not know;
+    // see § Configuration.
   },
 
   // All matching rewrites apply, in order
@@ -127,8 +129,20 @@ The `ctx` argument has `ctx.url`, `ctx.opener.bundleId`, and `ctx.modifiers.{shi
 | `"zen"` | Look up `zen` in `browsers` dict |
 | `"app.zen-browser.zen"` | Direct bundle ID |
 | `{ id: "com.google.Chrome", args: ["--incognito"] }` | Bundle ID with launch args |
+| `{ id: "…", args: […], dataDir: "Google/Chrome" }` | Launch args, with the browser's user data directory named explicitly |
 | `(url, ctx) => "zen"` | Dynamic target |
 | `null` | Suppress — do nothing |
+
+**On `args` and Chromium profiles.** macOS drops launch arguments when the
+target app is already running, so `--profile-directory` cannot reach a live
+Chrome through LaunchServices. Finch delivers it over the browser's own
+process-singleton socket instead, which is why a profile-routed link costs
+milliseconds rather than the ~110ms a second browser process would take —
+[docs/latency.md](docs/latency.md) has the measurements. Finding that socket
+needs to know the browser's user data directory; the mainstream Chromium
+browsers are built in, and `dataDir` (relative to `~/Library/Application
+Support`) names it for anything else. Get it wrong, or leave it out for an
+unrecognised browser, and the link still opens — it just takes the slow path.
 
 ### Rewrite rules
 
@@ -205,12 +219,13 @@ Code lines per file, comments excluded (`make loc` for the total):
 | File | Code | Responsibility |
 |---|---|---|
 | `Sources/Finch/main.swift` | 5 | Bootstrap |
-| `Sources/Finch/AppDelegate.swift` | 253 | Apple Event handler, hot path entry, browser launch, menu bar |
+| `Sources/Finch/AppDelegate.swift` | 280 | Apple Event handler, hot path entry, browser launch, menu bar |
 | `Sources/Finch/Loader.swift` | 33 | Read `~/.finch.js`, evaluate via JavaScriptCore, return module.exports |
 | `Sources/Finch/Helpers.swift` | 68 | Embedded JS prelude: URL polyfill + `domain`/`from`/`strip`/`running` helpers |
-| `Sources/Finch/Engine.swift` | 348 | Marker compilation + native hot-path resolver |
+| `Sources/Finch/Engine.swift` | 349 | Marker compilation + native hot-path resolver |
 | `Sources/Finch/Recents.swift` | 29 | In-memory list of recent routes for the menu bar |
-| `Sources/Finch/Trace.swift` | 70 | Per-route latency trace to `~/.finch.log` and `os_log` |
+| `Sources/Finch/Trace.swift` | 72 | Per-route latency trace to `~/.finch.log` and `os_log` |
+| `Sources/Finch/Singleton.swift` | 59 | Chromium's process-singleton protocol, so profile args skip a browser process |
 
 Why it is shaped this way — the decisions, the non-goals and the macOS
 behaviour the bundle depends on — is in

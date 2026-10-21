@@ -133,9 +133,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // macOS drops launch arguments when the app is already running, so a
         // profile flag would be ignored. A browser that is not running yet has
         // no such problem: launch it normally and the arguments are honoured.
-        let live = NSRunningApplication.runningApplications(withBundleIdentifier: spec.bundleId).first
+        let running = !NSRunningApplication.runningApplications(withBundleIdentifier: spec.bundleId).isEmpty
         trace.mark("running")
-        if live == nil {
+        if !running {
             cfg.arguments = spec.args + [url.absoluteString]
             NSWorkspace.shared.openApplication(at: appURL, configuration: cfg,
                                                completionHandler: done("launch"))
@@ -164,13 +164,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 switch Singleton.send(argv: argv, to: socket) {
                 case .ack:
                     trace.mark("socket")
-                    // Nothing has raised the browser: unlike a LaunchServices
-                    // launch, neither the socket nor a bare fork/exec activates
-                    // it, and a link that opens a tab you cannot see has not
-                    // really opened.
-                    live?.activate(options: [])
-                    trace.mark("activate")
-                    self.settle(entry, trace, "-> \(spec.bundleId) via=socket")
+                    self.activate(appURL) {
+                        trace.mark("activate")
+                        self.settle(entry, trace, "-> \(spec.bundleId) via=socket")
+                    }
                     return
                 case .declined(let why):
                     trace.mark("socketdeclined")
@@ -195,8 +192,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // it; the handler only exists so the log says how long it took.
             p.terminationHandler = { _ in
                 trace.mark("relay")
-                live?.activate(options: [])
-                self.settle(entry, trace, "-> \(spec.bundleId) via=relay")
+                self.activate(appURL) {
+                    trace.mark("activate")
+                    self.settle(entry, trace, "-> \(spec.bundleId) via=relay")
+                }
             }
             do { try p.run() } catch {
                 self.settle(entry, trace, "-> \(spec.bundleId) via=relay spawnerr=\(error)")
@@ -205,6 +204,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             trace.mark("spawn")
         }
         trace.mark("issue")
+    }
+
+    /// Bring the browser forward. Neither the singleton socket nor a bare
+    /// fork/exec raises a window — only a LaunchServices open does, which is
+    /// why the no-args path never needed this — and a tab you cannot see has
+    /// not really opened.
+    ///
+    /// `NSRunningApplication.activate` is the obvious call and the wrong one:
+    /// it is deprecated on macOS 14+, it is an AppKit call being made from a
+    /// background queue, and a `.prohibited` app is never frontmost enough for
+    /// macOS to honour it on another app's behalf. It measured 2.7ms and did
+    /// nothing. Asking LaunchServices to open the app with no URLs is the
+    /// supported path, and was checked not to add a tab (37 open, 37 after).
+    private func activate(_ appURL: URL, then done: @escaping () -> Void) {
+        NSWorkspace.shared.openApplication(at: appURL,
+                                           configuration: NSWorkspace.OpenConfiguration()) { _, _ in
+            done()
+        }
     }
 
     /// Close out a route: write the trace line, and put the figure in the menu
