@@ -133,9 +133,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // macOS drops launch arguments when the app is already running, so a
         // profile flag would be ignored. A browser that is not running yet has
         // no such problem: launch it normally and the arguments are honoured.
-        let running = !NSRunningApplication.runningApplications(withBundleIdentifier: spec.bundleId).isEmpty
+        let live = NSRunningApplication.runningApplications(withBundleIdentifier: spec.bundleId).first
         trace.mark("running")
-        if !running {
+        if live == nil {
             cfg.arguments = spec.args + [url.absoluteString]
             NSWorkspace.shared.openApplication(at: appURL, configuration: cfg,
                                                completionHandler: done("launch"))
@@ -144,12 +144,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Already running, so the arguments have to reach it on a fresh command
-        // line. Spawning the bundle's executable directly is the same thing
-        // `open -n -a <app> --args …` does — single-instance browsers hand the
-        // URL to the running process and exit — minus LaunchServices' launch
-        // machinery, which measured ~70ms slower and spiked past 250ms under
-        // load. fork/exec goes on a background queue so it is not even the
-        // main thread's problem.
+        // line — or, for a Chromium browser, straight down the socket a relay
+        // process would have used. That is the whole latency of a
+        // profile-routed link, so it is worth the one unsupported dependency;
+        // Singleton falls back here on anything it does not understand.
         guard let exe = executable(of: appURL) else {
             cfg.arguments = spec.args + [url.absoluteString]
             cfg.createsNewApplicationInstance = true
@@ -159,8 +157,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         trace.mark("exe")
-        let argv = spec.args + [url.absoluteString]
+        let argv = [exe.path] + spec.args + [url.absoluteString]
+        let socket = Singleton.socketPath(bundleId: spec.bundleId, dataDir: spec.dataDir)
         spawnQueue.async {
+            if let socket {
+                switch Singleton.send(argv: argv, to: socket) {
+                case .ack:
+                    trace.mark("socket")
+                    // Nothing has raised the browser: unlike a LaunchServices
+                    // launch, neither the socket nor a bare fork/exec activates
+                    // it, and a link that opens a tab you cannot see has not
+                    // really opened.
+                    live?.activate(options: [])
+                    trace.mark("activate")
+                    self.settle(entry, trace, "-> \(spec.bundleId) via=socket")
+                    return
+                case .declined(let why):
+                    trace.mark("socketdeclined")
+                    trace.note = "socket declined: \(why)"
+                case .unreachable(let why):
+                    trace.mark("socketmiss")
+                    trace.note = "socket unreachable: \(why)"
+                }
+            }
+            // Spawning the bundle's executable is the same thing
+            // `open -n -a <app> --args …` does — single-instance browsers hand
+            // the URL to the running process and exit — minus LaunchServices'
+            // launch machinery, which measured ~70ms slower and spiked past
+            // 250ms under load.
             let p = Process()
             p.executableURL = exe
             p.arguments = argv
@@ -171,6 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // it; the handler only exists so the log says how long it took.
             p.terminationHandler = { _ in
                 trace.mark("relay")
+                live?.activate(options: [])
                 self.settle(entry, trace, "-> \(spec.bundleId) via=relay")
             }
             do { try p.run() } catch {

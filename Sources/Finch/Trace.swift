@@ -35,6 +35,9 @@ final class RouteTrace {
     /// Bundle id of the app the link came from, for grepping the log by sender.
     var from: String = ""
 
+    /// Why a fast path was not taken. Empty on the happy path.
+    var note: String = ""
+
     /// Receive -> now, in milliseconds.
     var elapsedMs: Double { Double(monotonicNs() - t0) / 1_000_000 }
 
@@ -58,6 +61,7 @@ final class RouteTrace {
         os_unfair_lock_unlock(&lock)
         let t0 = self.t0, wall = self.wall
         let summary = "from=\(from.isEmpty ? "?" : from) " + summary
+            + (note.isEmpty ? "" : "  [\(note)]")
         Trace.shared.write {
             var line = String(format: "%.6f", wall) + " "
             var prev = t0

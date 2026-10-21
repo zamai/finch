@@ -7,6 +7,9 @@ import AppKit
 struct BrowserSpec {
     let bundleId: String
     let args: [String]
+    /// Chromium user data directory, relative to `~/Library/Application
+    /// Support` — only needed to override `Singleton.knownDataDirs`.
+    var dataDir: String? = nil
 }
 
 struct Resolution {
@@ -221,7 +224,7 @@ private func parseBrowser(_ val: Any) -> BrowserSpec {
     if let d = val as? [String: Any] {
         let id = d["id"] as? String ?? ""
         let args = d["args"] as? [String] ?? []
-        return BrowserSpec(bundleId: id, args: args)
+        return BrowserSpec(bundleId: id, args: args, dataDir: d["dataDir"] as? String)
     }
     return BrowserSpec(bundleId: "", args: [])
 }
