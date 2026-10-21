@@ -100,15 +100,33 @@ the browser with no URLs is the supported path, and was checked not to add a tab
   dictionary exposes window `id`, `title` and `mode`, but nothing that says
   which profile a window belongs to, so there is no way to pick the right one.
 
-## What is left, and whose cost it is
+## The Meet PWA route: investigated, left alone
 
-**The Meet PWA route is sometimes slow and has not been investigated.** Real
-traffic shows `com.apple.iCal -> com.google.Chrome.app.kjgf… via=open
-handoff=390ms` against `com.granola.app -> the same PWA, 21.8ms`. A Chrome PWA
-shim is itself a relay process, so the likely story is the same one as above:
-fast while the shim is resident, slow when it has to launch. Routing it down the
-socket with `--app-id=` instead would plausibly fix it, and needs a test that
-opens a tab.
+Real traffic showed `com.apple.iCal -> com.google.Chrome.app.kjgf… via=open
+handoff=390ms`, against 21.8ms for the same PWA from `com.granola.app`. The
+cause is the same shape as the profile relay: a Chrome PWA is a real app bundle
+whose executable is `app_mode_loader`, so LaunchServices has to launch a process
+whenever no Meet window is open. While one is open the shim is resident and the
+open is just an Apple Event — hence 21.8ms.
+
+The obvious fix was to send the PWA's flags down the singleton socket like any
+other profile route. It does not work, and both attempts are worth recording
+because each fails for a different reason.
+
+| Sent over the socket | Result |
+|---|---|
+| `--profile-directory=Profile 1 --app-id=kjgf… <url>` | `ACK` in 0.2ms, opens the real PWA, **ignores the URL** — the window loaded `meet.google.com/home?lfhs=2`, the app's own start URL, not the URL passed. A meeting link would land on Meet's home page. |
+| `--profile-directory=Profile 1 --app=<url>` | `ACK` in 0.2–0.4ms, honours both URL and profile, but **is not the installed web app**. Checked by watching for the shim: `--app-id` makes Chrome launch `app_mode_loader --launched-by-chrome-process-id=…`, `--app=` never does. So the window has no Google Meet identity in the Dock or ⌘-Tab. |
+
+The reason no command line can do this: the shim forwards an opened URL to
+Chrome over the app-shim IPC channel, not on a command line, so there is no flag
+that means "navigate app X to URL Y".
+
+Left as it is, deliberately. The 390ms only happens on the first Meet link while
+no Meet window is open, it is an order of magnitude smaller than the worst case
+the socket removed, and both alternatives trade away the PWA to buy it.
+
+## What is left, and whose cost it is
 
 `pre` — the gap between the click and Finch's handler — measured 65–110ms in
 every sample, but each of those was triggered by `/usr/bin/open`, which spends
