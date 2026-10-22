@@ -29,7 +29,7 @@ install: build
 # Resolve a URL against the live config and print the result; opens nothing.
 # Runs the bare binary rather than the bundle, so nothing new gets registered.
 test:
-	@swift build -c release 2>&1 | grep -E "error|warning" || true
+	@swift build -c release >/dev/null 2>&1 || swift build -c release
 	@.build/release/Finch --test "$(URL)"
 
 clean:
