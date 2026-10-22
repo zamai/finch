@@ -1,15 +1,11 @@
 import Foundation
 
-// JS prelude evaluated once at config load. Provides:
-//   - A minimal URL polyfill (RFC 3986 regex parser)
-//   - Helper functions that return marker objects compiled by Swift to native code
-//   - CommonJS module scaffolding
+// JS prelude evaluated once at config load: a minimal URL polyfill
+// (JavaScriptCore has no DOM, so `URL` does not otherwise exist), the `domain`
+// helper, and CommonJS scaffolding.
 //
-// Everything here is engineered for a single goal: keep the hot path in Swift.
-// Helpers return DATA (marker objects), not functions, so the engine compiles
-// them to NSRegularExpression / Set<String> / etc. at config load time. Bridge
-// crossings on the hot path are only paid for user-written `(url, ctx) => ...`
-// predicates.
+// `domain` returns DATA, not a function, so the engine compiles it to a native
+// host check at load time and matching never re-enters JavaScript.
 
 let JS_PRELUDE = """
 // ---------- URL polyfill (lazy searchParams, no DOM, no IDNA) ----------
@@ -55,7 +51,7 @@ let JS_PRELUDE = """
   g.URL = URL;
 })(this);
 
-// ---------- Marker-returning helpers (compiled to native by Swift) ----------
+// ---------- Marker helper (compiled to native by Swift) ----------
 
 // Match URLs whose hostname is one of the given hosts, or a subdomain thereof.
 //   domain("github.com")           → matches github.com, *.github.com
@@ -64,31 +60,6 @@ function domain() {
   var hosts = [];
   for (var i = 0; i < arguments.length; i++) hosts.push(String(arguments[i]).toLowerCase());
   return { __type: "domain", hosts: hosts };
-}
-
-// Match when the calling app is one of these bundle IDs.
-//   from("com.tinyspeck.slackmacgap")
-function from() {
-  var apps = [];
-  for (var i = 0; i < arguments.length; i++) apps.push(String(arguments[i]));
-  return { __type: "from", apps: apps };
-}
-
-// Match when any of these apps is currently running.
-//   running("us.zoom.xos")
-function running() {
-  var apps = [];
-  for (var i = 0; i < arguments.length; i++) apps.push(String(arguments[i]));
-  return { __type: "running", apps: apps };
-}
-
-// Rewrite that strips the named query params. Supports trailing * for prefix.
-//   strip("utm_source", "fbclid")
-//   strip("utm_*")                    → strips utm_source, utm_medium, ...
-function strip() {
-  var params = [];
-  for (var i = 0; i < arguments.length; i++) params.push(String(arguments[i]));
-  return { __type: "strip", params: params };
 }
 
 // ---------- CommonJS scaffolding ----------

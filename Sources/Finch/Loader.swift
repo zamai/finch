@@ -11,7 +11,9 @@ struct LoadedConfig {
 }
 
 func loadConfig() -> LoadedConfig? {
-    let path = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".finch.js")
+    // FINCH_CONFIG lets `--test` try a config without touching the live one.
+    let path = URL(fileURLWithPath: ProcessInfo.processInfo.environment["FINCH_CONFIG"]
+                   ?? NSHomeDirectory() + "/.finch.js")
     guard let source = try? String(contentsOf: path, encoding: .utf8) else {
         fputs("finch: no config at \(path.path) — create ~/.finch.js\n", stderr)
         return nil

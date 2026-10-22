@@ -54,34 +54,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let raw = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
               let engine else { return }
 
-        let opener    = openerBundleId(from: event)
-        trace.mark("opener")
-        let modifiers = NSEvent.modifierFlags
-        trace.mark("mods")
-
-        let result = engine.resolve(urlString: raw, opener: opener, modifiers: modifiers)
+        let result = engine.resolve(raw)
         trace.mark("resolve")
-        // Rules match on bundle id; the menu prefers it too, but falls back to
-        // the sender's executable name so a non-app sender reads as "osascript"
-        // rather than an unexplained blank.
+        // Not used for routing — it says which app a slow link came from. The
+        // bundle id where there is one, else the executable name, so a non-app
+        // sender reads as "osascript" rather than an unexplained blank.
+        let opener = openerBundleId(from: event)
         let from = opener.isEmpty ? senderExecutableName(from: event) : opener
+        trace.mark("opener")
         let id = RouteHistory.shared.record(opener: from,
                                original: raw,
                                final: result.url.absoluteString,
                                bundleId: result.browser.bundleId)
         trace.mark("record")
         trace.from = from
-        if result.browser.bundleId.isEmpty {            // suppressed (open: null)
-            trace.emit("suppressed")
-            return
-        }
         open(url: result.url, spec: result.browser, trace: trace, entry: id)
     }
 
-    /// Bundle id of the sending app, for `from()` rules and the menu.
-    /// Must come from the event's sender pid, not `frontmostApplication`:
-    /// handling a GURL event makes Finch frontmost, so that answers
-    /// "com.finch.browser" for every link and no `from()` rule can match.
+    /// Bundle id of the sending app. Must come from the event's sender pid, not
+    /// `frontmostApplication`: handling a GURL event makes Finch frontmost, so
+    /// that answers "com.finch.browser" for every link.
     private func openerBundleId(from event: NSAppleEventDescriptor) -> String {
         let mine = Bundle.main.bundleIdentifier
         if let pid = event.attributeDescriptor(forKeyword: keySenderPID)?.int32Value, pid > 0,
@@ -94,7 +86,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Executable name for senders that are not apps and have no bundle id.
-    /// Display-only — `from()` matches bundle ids, never this.
     private func senderExecutableName(from event: NSAppleEventDescriptor) -> String {
         guard let pid = event.attributeDescriptor(forKeyword: keySenderPID)?.int32Value, pid > 0
         else { return "" }
@@ -158,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         trace.mark("exe")
         let argv = [exe.path] + spec.args + [url.absoluteString]
-        let socket = Singleton.socketPath(bundleId: spec.bundleId, dataDir: spec.dataDir)
+        let socket = Singleton.socketPath(bundleId: spec.bundleId)
         spawnQueue.async {
             if let socket {
                 switch Singleton.send(argv: argv, to: socket) {
@@ -263,7 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func testURL(_ raw: String) {
         guard let engine else { print("finch: no config loaded"); return }
-        let result = engine.resolve(urlString: raw, opener: "test.app", modifiers: [])
+        let result = engine.resolve(raw)
         print("URL:     \(raw)")
         print("Final:   \(result.url)")
         print("Browser: \(result.browser.bundleId)")
@@ -273,11 +264,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func bench(n: Int, url: String) {
         guard let engine else { print("finch: no config loaded"); return }
         for _ in 0 ..< min(n / 10, 1_000) {
-            _ = engine.resolve(urlString: url, opener: "com.tinyspeck.slackmacgap", modifiers: [])
+            _ = engine.resolve(url)
         }
         let start = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)
         for _ in 0 ..< n {
-            _ = engine.resolve(urlString: url, opener: "com.tinyspeck.slackmacgap", modifiers: [])
+            _ = engine.resolve(url)
         }
         let elapsed = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) - start
         let nsPerOp = elapsed / UInt64(n)
@@ -285,7 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         print("Benchmark: \(n) iterations")
         print("Total:     \(elapsed / 1_000_000)ms")
         print("Per-op:    \(nsPerOp)ns  (\(String(format: "%.2f", usPerOp))µs)")
-        let r = engine.resolve(urlString: url, opener: "com.tinyspeck.slackmacgap", modifiers: [])
+        let r = engine.resolve(url)
         print("URL:       \(url)")
         print("Browser:   \(r.browser.bundleId)")
     }
@@ -324,13 +315,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// One recent route: "  github.com/foo/bar \u{2192} Chrome". Click copies the URL.
     private func recentItem(for entry: RouteEntry) -> NSMenuItem {
-        let target = entry.suppressed ? "blocked" : browserName(entry.bundleId)
+        let target = browserName(entry.bundleId)
         let took = entry.ms.map { String(format: "  %.0fms", $0) } ?? ""
         let item = NSMenuItem(title: "  \(shorten(entry.final)) \u{2192} \(target)\(took)",
                               action: #selector(copyRecentURL(_:)), keyEquivalent: "")
         item.target = self
         item.representedObject = entry.final
-        var tip = entry.final + "\n\u{2192} " + (entry.suppressed ? "suppressed (open: null)" : entry.bundleId)
+        var tip = entry.final + "\n\u{2192} " + entry.bundleId
         if !entry.opener.isEmpty { tip += "\nfrom \(entry.opener)" }
         if entry.rewritten { tip += "\nrewritten from \(entry.original)" }
         tip += "\n\nClick to copy URL"

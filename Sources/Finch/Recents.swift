@@ -10,10 +10,9 @@ struct RouteEntry {
                             // sender's executable name; "" if unresolvable
     let original: String    // URL as received
     let final: String       // URL after rewrites
-    let bundleId: String    // browser it was sent to ("" = suppressed by `open: null`)
+    let bundleId: String    // browser it was sent to
     var ms: Double?         // receive -> browser has it; nil until the open lands
 
-    var suppressed: Bool { bundleId.isEmpty }
     var rewritten: Bool { original != final }
 }
 

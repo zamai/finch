@@ -34,31 +34,19 @@ enum Singleton {
         case unreachable(String)
     }
 
-    /// Where a Chromium browser keeps `SingletonSocket`, under
-    /// `~/Library/Application Support`. Only Chrome is verified on this
-    /// machine; the others follow Chromium's naming convention, and a browser's
-    /// `dataDir` config key overrides any of it:
-    ///
-    ///     chromeWork: { id: "com.google.Chrome", args: [...], dataDir: "Google/Chrome" }
-    ///
-    /// A bundle id that is in neither place just takes the relay path, which is
-    /// what every other router does anyway.
-    static let knownDataDirs: [String: String] = [
-        "com.google.Chrome":        "Google/Chrome",
-        "com.google.Chrome.beta":   "Google/Chrome Beta",
-        "com.google.Chrome.dev":    "Google/Chrome Dev",
-        "com.google.Chrome.canary": "Google/Chrome Canary",
-        "org.chromium.Chromium":    "Chromium",
-        "com.brave.Browser":        "BraveSoftware/Brave-Browser",
-        "com.microsoft.edgemac":    "Microsoft Edge",
-        "com.vivaldi.Vivaldi":      "Vivaldi",
+    /// Where a browser keeps `SingletonSocket`, under `~/Library/Application
+    /// Support`. Only Chrome is listed because only Chrome is verified; any
+    /// other bundle id with launch args takes the relay path, which is what
+    /// every other router does anyway.
+    static let dataDirs: [String: String] = [
+        "com.google.Chrome": "Google/Chrome",
     ]
 
     /// The symlink Chromium leaves in the user data directory. Deliberately not
     /// resolved: it points into `/var/folders/…`, which is long enough to risk
     /// the 104-byte `sun_path` limit, and connect() follows symlinks anyway.
-    static func socketPath(bundleId: String, dataDir: String?) -> String? {
-        guard let dir = dataDir ?? knownDataDirs[bundleId] else { return nil }
+    static func socketPath(bundleId: String) -> String? {
+        guard let dir = dataDirs[bundleId] else { return nil }
         let path = NSHomeDirectory() + "/Library/Application Support/" + dir + "/SingletonSocket"
         return FileManager.default.fileExists(atPath: path) ? path : nil
     }
