@@ -7,6 +7,11 @@ private let keySenderPID        = AEKeyword(0x73706964)     // 'spid'
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var engine: Engine?
+    /// Where links go when no config has ever loaded. A link that vanishes is
+    /// worse than one in the wrong browser, and Safari is the one browser that
+    /// is always installed. A config that fails on reload never gets here: the
+    /// previous engine keeps running.
+    private static let fallback = BrowserSpec(bundleId: "com.apple.Safari", args: [])
     private var statusItem: NSStatusItem?
     /// bundle id -> human name, so building the menu does not hit LaunchServices
     /// once per item every time it opens.
@@ -29,21 +34,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The CLI modes run beside the installed app, so they must not write
+        // to its log or put a second icon in the menu bar.
+        let args = CommandLine.arguments.dropFirst()
+        if let ti = args.firstIndex(of: "--test"), args.indices.contains(ti + 1) {
+            Trace.shared.toFile = false
+            reloadEngine()
+            testURL(String(args[ti + 1]))
+            exit(0)
+        }
+        if let bi = args.firstIndex(of: "--bench"),
+           args.indices.contains(bi + 1), args.indices.contains(bi + 2) {
+            Trace.shared.toFile = false
+            reloadEngine()
+            bench(n: Int(args[bi + 1]) ?? 10_000, url: String(args[bi + 2]))
+            exit(0)
+        }
+
         reloadEngine()
         setupMenuBar()
         signal(SIGHUP) { _ in
             DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.reloadEngine() }
-        }
-
-        let args = CommandLine.arguments.dropFirst()
-        if let ti = args.firstIndex(of: "--test"), args.indices.contains(ti + 1) {
-            testURL(String(args[ti + 1]))
-            NSApp.terminate(nil)
-        }
-        if let bi = args.firstIndex(of: "--bench"),
-           args.indices.contains(bi + 1), args.indices.contains(bi + 2) {
-            bench(n: Int(args[bi + 1]) ?? 10_000, url: String(args[bi + 2]))
-            NSApp.terminate(nil)
         }
     }
 
@@ -51,10 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
         let trace = RouteTrace()
-        guard let raw = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
-              let engine else { return }
+        guard let raw = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue else { return }
 
-        let result = engine.resolve(raw)
+        let result = engine?.resolve(raw) ?? Resolution(browser: Self.fallback, url: raw)
+        if engine == nil { trace.note = "no config loaded" }
         trace.mark("resolve")
         // Not used for routing — it says which app a slow link came from. The
         // bundle id where there is one, else the executable name, so a non-app
@@ -64,11 +75,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         trace.mark("opener")
         let id = RouteHistory.shared.record(opener: from,
                                original: raw,
-                               final: result.url.absoluteString,
+                               final: result.url,
                                bundleId: result.browser.bundleId)
         trace.mark("record")
         trace.from = from
-        open(url: result.url, spec: result.browser, trace: trace, entry: id)
+        // A rewrite can return a string that is not a URL. Opening the link as
+        // it arrived beats crashing, which would cost a cold start and the link.
+        guard let url = URL(string: result.url) ?? URL(string: raw) else {
+            trace.emit("badurl")
+            return
+        }
+        open(url: url, spec: result.browser, trace: trace, entry: id)
     }
 
     /// Bundle id of the sending app. Must come from the event's sender pid, not
@@ -96,7 +113,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func open(url: URL, spec: BrowserSpec, trace: RouteTrace, entry: Int) {
         guard let appURL = appURL(for: spec.bundleId) else {
-            fputs("finch: browser not found: \(spec.bundleId)\n", stderr)
             // Deliberately not NSWorkspace.open(url): Finch is the default
             // handler, so that would hand the URL straight back to Finch.
             trace.emit("notfound=\(spec.bundleId)")
@@ -247,9 +263,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func reloadEngine() {
         appURLs.removeAll(); executables.removeAll(); browserNames.removeAll()
-        guard let loaded = loadConfig() else { return }
-        do { engine = try Engine(loaded: loaded) }
-        catch { fputs("finch: engine init failed: \(error)\n", stderr) }
+        let keeping = engine == nil ? "links go to Safari until it loads" : "keeping the previous config"
+        guard let loaded = loadConfig() else { Trace.shared.report("config not loaded; \(keeping)"); return }
+        do {
+            engine = try Engine(loaded: loaded)
+            if Trace.shared.toFile { Trace.shared.report("config loaded") }
+        } catch {
+            Trace.shared.report("config rejected: \(error); \(keeping)")
+        }
     }
 
     private func testURL(_ raw: String) {

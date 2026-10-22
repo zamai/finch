@@ -8,7 +8,7 @@ struct BrowserSpec {
 
 struct Resolution {
     let browser: BrowserSpec
-    let url: URL
+    let url: String           // after rewrites
 }
 
 struct ConfigError: Error, CustomStringConvertible {
@@ -94,7 +94,7 @@ final class Engine {
             }
         }
         let browser = rules.first { anyMatch($0.matchers, current) }?.browser ?? defaultBrowser
-        return Resolution(browser: browser, url: URL(string: current) ?? URL(string: raw)!)
+        return Resolution(browser: browser, url: current)
     }
 
     private func anyMatch(_ matchers: [Matcher], _ url: String) -> Bool {

@@ -84,6 +84,17 @@ final class Trace {
 
     private let sink = DispatchQueue(label: "com.finch.browser.trace", qos: .utility)
     private let path = NSHomeDirectory() + "/.finch.log"
+    /// Off for `--test` and `--bench`, which report to stderr instead.
+    var toFile = true
+
+    /// Something the user needs to see that is not a route — a rejected
+    /// config, a JavaScript exception. Finch has no window and its stderr goes
+    /// nowhere once installed, so this log is the only place it can say so.
+    func report(_ message: String) {
+        if !toFile { fputs("finch: \(message)\n", stderr); return }
+        let wall = Date().timeIntervalSince1970
+        write { String(format: "%.6f", wall) + " finch: " + message }
+    }
 
     static func ms(_ ns: UInt64) -> String {
         String(format: "%.1fms", Double(ns) / 1_000_000)

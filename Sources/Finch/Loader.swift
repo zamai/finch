@@ -15,7 +15,7 @@ func loadConfig() -> LoadedConfig? {
     let path = URL(fileURLWithPath: ProcessInfo.processInfo.environment["FINCH_CONFIG"]
                    ?? NSHomeDirectory() + "/.finch.js")
     guard let source = try? String(contentsOf: path, encoding: .utf8) else {
-        fputs("finch: no config at \(path.path) — create ~/.finch.js\n", stderr)
+        Trace.shared.report("no config at \(path.path)")
         return nil
     }
 
@@ -25,7 +25,7 @@ func loadConfig() -> LoadedConfig? {
         let line = ex?.objectForKeyedSubscript("line").toString() ?? "?"
         let msg  = ex?.toString() ?? "unknown"
         lastError = "\(msg) (line \(line))"
-        fputs("finch: js error: \(lastError ?? "")\n", stderr)
+        Trace.shared.report("js error: \(lastError ?? "")")
     }
 
     // Inject prelude (URL polyfill + helpers + module scaffolding)
@@ -40,7 +40,7 @@ func loadConfig() -> LoadedConfig? {
           let exports = mod.objectForKeyedSubscript("exports"),
           !exports.isUndefined && !exports.isNull
     else {
-        fputs("finch: config did not export anything (use module.exports = {...})\n", stderr)
+        Trace.shared.report("config did not export anything (use module.exports = {...})")
         return nil
     }
 
