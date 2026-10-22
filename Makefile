@@ -2,7 +2,7 @@ APP     = Finch.app
 BUNDLE  = $(APP)/Contents
 BINARY  = $(BUNDLE)/MacOS/Finch
 
-.PHONY: build run clean install test
+.PHONY: build install test clean loc trace
 
 LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 
@@ -14,17 +14,9 @@ build:
 	@codesign --deep --force --sign - $(APP)
 	@echo "Built $(APP)"
 
-# Open the app and register with Launch Services
-run: build
-	@pkill -f "Finch.app/Contents/MacOS/Finch" 2>/dev/null || true
-	@sleep 0.2
-	@$(LSREGISTER) -f $(APP)
-	open $(APP)
-	@echo "Finch running. Set as default browser in System Settings → Desktop & Dock → Default web browser."
-
-# Replace the installed copy and register it. The installed bundle is what
-# LaunchServices resolves com.finch.browser to, so measurements and fixes have
-# to land there — a bare `make run` leaves two copies fighting over the id.
+# Replace the installed copy and register it. There is deliberately no target
+# that registers the repo's own Finch.app: two registered copies fight over
+# com.finch.browser, and links go to whichever registered last.
 install: build
 	@pkill -f "Finch.app/Contents/MacOS/Finch" 2>/dev/null || true
 	@sleep 0.3
@@ -34,9 +26,11 @@ install: build
 	@open /Applications/$(APP)
 	@echo "Installed and running /Applications/$(APP)"
 
-# Test a URL against current config without launching a browser
-test: build
-	$(BINARY) --test "$(URL)"
+# Resolve a URL against the live config and print the result; opens nothing.
+# Runs the bare binary rather than the bundle, so nothing new gets registered.
+test:
+	@swift build -c release 2>&1 | grep -E "error|warning" || true
+	@.build/release/Finch --test "$(URL)"
 
 clean:
 	rm -rf .build $(APP)

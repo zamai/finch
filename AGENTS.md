@@ -1,85 +1,79 @@
 # Finch — agent orientation
 
 Finch is a macOS browser router: it registers as the default browser and sends
-each URL to a browser chosen by rules in the user's `~/.finch.js`. Swift plus
-JavaScriptCore, no bundler. `make loc` prints the current size (code lines,
-comments excluded — that is the figure quoted in README.md and COMPARISON.md).
+each URL to a browser, Chrome profile or app chosen by `~/.finch.js`. Swift plus
+JavaScriptCore. The goal is speed and reliability for one person's config;
+anything else is a candidate for deletion. `make loc` prints the size (669 code
+lines at the last count).
 
-**This file is mostly an index.** It exists so you can find out what has already
-been decided before deciding it again. Nothing here is copied from the documents
-it points at; follow the pointer and read the source. The one exception is the
-last section, which holds facts that have no document of their own yet — when
-one of those grows past a few lines, move it into `docs/` and leave a pointer.
+This is a solo fork (`zamai/finch`, the only remote). Commit straight to
+`main`: no branches, no PRs, no releases. It is not the upstream
+`expelledboy/finch`, which is not tracked.
 
-**Maintaining it:** when you add a document, a directory, or a piece of the
-system that lives outside this repository, add a row below. A catalogue that
-silently goes stale is worse than none, because it reads as complete.
-
-**Only point at committed files.** `.claude/` is in `.gitignore`, so anything
-there is invisible to a fresh clone and to any agent but the one that wrote it.
-Working notes may live there; nothing another reader must have may. If a scratch
-file is holding a fact worth keeping, move the fact into `docs/` or this file
-first.
+**This file is an index.** Follow the pointer and read the source rather than
+copying facts in. When you add a document, a file or something outside the
+repo, add a row. Only point at committed files: `.claude/` is gitignored.
 
 ## Read before you act
 
 | Before you… | Read | It already settles |
 |---|---|---|
-| cut a release, bump a version, change how Finch is distributed | `docs/homebrew.md` | the two-repo tap layout, why the cask builds from source on the user's machine rather than shipping a binary, and the exact release order — the bundle version is bumped **before** tagging, because the cask builds from the tag's tarball |
-| add a feature, or check whether one exists | `FEATURES.md` | per-feature status, including the ❌ rows that are deliberate non-goals rather than gaps |
-| make a claim about Finch versus an alternative, or quote a number | `COMPARISON.md` | 18 evaluated alternatives, the sources behind each figure, and the caveat on how the line-count row was measured |
-| chase a slow link open, or add a timing measurement | `docs/latency.md` | the measured per-stage cost of a route, which stage dominates (browser launch, never routing), how `--profile-directory` reaches a running browser without starting one, and six fixes already tested and ruled out — including why Chrome's `last_used` profile cannot be used to skip the relay, and why neither `--app-id` nor `--app=` fixes the Meet PWA route |
-| change the architecture, or ask "why JavaScriptCore", "why marker objects" | `docs/architecture.md` | the stated design goal, each key decision with its rationale, the explicit non-goals and the reason behind each, and the macOS platform behaviour the bundle configuration encodes |
-| change config syntax or helper semantics | `examples/finch.example.js`, then README.md § Configuration | the user-facing contract, which is what breaks when the engine changes |
-| touch the bundle, URL schemes, or default-browser candidacy | `Info.plist` | which schemes Finch claims — `http`, `https` and `mailto`, deliberately not the `public.html` document type, for the reason README.md § Install gives — and `LSUIElement` for the no-Dock-icon behaviour |
-| change how it is built, run, or measured | `Makefile` | `build`, `run`, `test URL=…`, `loc`, and how the `.app` is assembled and ad-hoc signed |
+| chase a slow link open, or change how a URL reaches the browser | `docs/latency.md` | the measured cost of each stage (delivery to the browser, never routing), how `--profile-directory` reaches a running Chrome down its singleton socket, how the window gets raised, and six fixes already tested and ruled out — including Chrome's `last_used`, `--app-id` and `--app=` for the Meet PWA |
+| add config syntax, or ask "why JavaScriptCore", "why marker objects" | `docs/architecture.md` | the goal, why the config surface is deliberately small and enforced, the never-lose-a-link rules, and the macOS behaviour `Info.plist` encodes |
+| change config syntax or what it accepts | `~/.finch.js`, then README.md § Configuration | the live config is the spec: syntax it does not use was removed. Check a change against it with `make test URL=…`, or try another file with `FINCH_CONFIG=<path>` |
+| touch the bundle, URL schemes, or default-browser candidacy | `Info.plist`, then `docs/architecture.md` § Platform behaviour | which schemes Finch claims and why not `public.html`; `LSUIElement`; why `NSUserActivityTypeBrowsingWeb` must stay |
+| build, install or measure | `Makefile` | `install` (the only way to run it), `test URL=…`, `trace`, `loc` |
 
 ## Source map
 
 | File | Responsibility |
 |---|---|
-| `Sources/Finch/main.swift` | Entry point; sets the activation policy that keeps Finch out of the Dock |
-| `Sources/Finch/AppDelegate.swift` | Apple Event (`GURL`) handling, opening the chosen browser, the menu bar, `--test` and `--bench` |
-| `Sources/Finch/Engine.swift` | The hot path: config compiled to native matchers, rewrite pipeline, first-match-wins resolution |
-| `Sources/Finch/Loader.swift` | Reads `~/.finch.js` and evaluates it in a JavaScriptCore context |
-| `Sources/Finch/Helpers.swift` | `JS_PRELUDE` — JavaScript injected into every config context: a `URL` polyfill (JavaScriptCore has no DOM, so `URL` does not otherwise exist) and the marker-object helpers `domain`, `from`, `strip` and `running`, which return data rather than functions so `Engine.swift` can compile them to native Swift at load time. `docs/architecture.md` explains why |
-| `Sources/Finch/Recents.swift` | In-memory list of the last few routes shown in the menu bar |
-| `Sources/Finch/Trace.swift` | Per-route latency trace. Marks cost integers on the hot path; formatting and IO happen on a utility queue, to `~/.finch.log` and `os_log` (`make trace`) |
-| `Sources/Finch/Singleton.swift` | Chromium's process-singleton socket protocol. How `--profile-directory` reaches an already-running browser without starting a second one — the single biggest latency win, and the reason to read `docs/latency.md` before touching the open path |
+| `Sources/Finch/main.swift` | Entry point; the activation policy that keeps Finch out of the Dock |
+| `Sources/Finch/AppDelegate.swift` | Apple Event (`GURL`) handling; delivering the URL (plain open, launch with args, singleton socket, relay fallback) and raising the window; the Safari fallback; the menu bar; `--test` and `--bench` |
+| `Sources/Finch/Engine.swift` | The hot path: config compiled to native matchers, rewrites, first match wins. Rejects anything it does not understand |
+| `Sources/Finch/Loader.swift` | Reads `~/.finch.js` (or `FINCH_CONFIG`) into a JavaScriptCore context |
+| `Sources/Finch/Helpers.swift` | `JS_PRELUDE`: a `URL` polyfill (JavaScriptCore has no DOM) and `domain()`, which returns data so the engine can compile it |
+| `Sources/Finch/Recents.swift` | The last 10 routes with timings, in memory, for the menu bar |
+| `Sources/Finch/Trace.swift` | Per-route latency trace and error reports, written off the main thread to `~/.finch.log` and `os_log` (`make trace`) |
+| `Sources/Finch/Singleton.swift` | Chromium's process-singleton socket protocol: how a profile flag reaches a running Chrome without starting a second one. The biggest latency win; read `docs/latency.md` first |
+
+## Verifying a change without opening windows
+
+The author works on this machine, and every real open puts a window in front
+of them. Prefer checks that open nothing:
+
+- Routing: run `.build/release/Finch --test <url>` over a set of URLs before
+  and after, and diff the output.
+- Speed: `.build/release/Finch --bench 20000 <url>`.
+- Delivery: `make install` (no window), then read `~/.finch.log` after the
+  author's own clicks. Real clicks carry the sending app and are better data.
+
+Ask before anything that opens a URL.
 
 ## Not in this repository
 
-These are load-bearing and cannot be discovered by reading the repo.
-
 | What | Where | Why it matters |
 |---|---|---|
-| The Homebrew tap holding the cask that installs Finch | `~/repos/github/homebrew-finch` on this machine; `expelledboy/homebrew-finch` on GitHub | A release is not finished in this repo. The cask's `version` and `sha256` must be bumped there too — see `docs/homebrew.md` |
-| The user's live routing rules | `~/.finch.js` | Not version-controlled and not an example. `make test URL=…` and the running app both read it |
-| The installed application | `/Applications/Finch.app` | Where `make install` puts the fork's build (and where the upstream cask would install — `brew install` overwrites the fork). A local `make run` registers the *repo's* copy instead, which then wins the bundle id |
-| The remote | `origin` = `zamai/finch`, the only remote. Push here, commit straight to `main` | A solo project forked from `expelledboy/finch`: no PRs, no review, no releases, and no upstream remote — the original repo is deliberately not tracked. `docs/homebrew.md` describes the original's release flow, not this fork's |
-| Released versions | git tags (`v0.1.0`, `v0.1.1`); no GitHub Release objects | The cask fetches GitHub's auto-generated tag tarball, so a tag alone is a release |
-| Conversation with the author of Finicky, the established macOS browser router Finch is positioned against | `github.com/johnste/finicky/discussions/523` | Context for positioning claims |
+| The live routing rules | `~/.finch.js`, a symlink to `~/Code/mac-setup/finch.js` | The spec for what the config must support. Not an example: edit it only when asked |
+| The installed application | `/Applications/Finch.app` | What LaunchServices sends links to. `make install` replaces it |
+| The route log | `~/.finch.log` (rotated at 1MB to `.finch.log.1`) | Timings, sender and path per link, plus config loads and errors. No URLs |
 
 ## Gotchas with no other home
 
-- **Two copies of the app fight over the bundle id.** LaunchServices resolves
-  `com.finch.browser` to whichever bundle was registered last, so after
-  `make run` the repo's `Finch.app` handles URLs instead of the installed one.
-  Undo with `lsregister -u <repo>/Finch.app` then `lsregister -f
-  /Applications/Finch.app`. The binary is at
+- **Two copies of the app fight over the bundle id.** LaunchServices sends
+  `com.finch.browser` links to whichever bundle registered last. That is why
+  there is no `make run`. If a stray copy got registered, undo with
+  `lsregister -u <path>/Finch.app` then `lsregister -f /Applications/Finch.app`.
+  The binary is
   `/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister`.
-- **The opener must come from the Apple Event's sender pid.**
+- **The sender must come from the Apple Event's sender pid.**
   `NSWorkspace.frontmostApplication` reports Finch itself, because handling the
-  event makes Finch frontmost — so `from()` rules, which match on the bundle id
-  of the app the link came from, silently never match. See `openerBundleId` in
-  `AppDelegate.swift`.
-- **A stale file-type or URL-scheme binding survives `lsregister -kill -r`.**
-  The rebuilt database is correct but `lsd`, the Launch Services daemon, keeps
-  serving an in-memory copy of the old handler map; kill `lsd` too. Fuller note
-  in `docs/architecture.md` § Platform behaviour.
+  event makes Finch frontmost. See `openerBundleId` in `AppDelegate.swift`.
+- **A stale URL-scheme binding survives `lsregister -kill -r`.** `lsd` keeps
+  serving its in-memory map; kill it too. See `docs/architecture.md` § Platform
+  behaviour.
 - **The menu bar icon can be placed off-screen.** macOS persists its slot in
   `NSStatusItem Preferred Position Item-0` under the `com.finch.browser`
-  defaults domain; a position saved on a wider display can leave it invisible.
-  Quit Finch, `defaults delete` that key, relaunch. Reading the position through
-  Accessibility is not a reliable check — it has reported an off-screen
-  coordinate for an icon that was plainly visible.
+  defaults domain. Quit Finch, `defaults delete` that key, relaunch.
+  Accessibility has reported off-screen coordinates for a visible icon, so do
+  not trust it as a check.

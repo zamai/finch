@@ -1,9 +1,9 @@
 # Where the time goes
 
 Measured on this machine (Darwin 25.6, Chrome running, config at `~/.finch.js`)
-on 2026-10-20. Reproduce with `scripts/latency.sh <url>…`, which joins a send
-timestamp against the wall clock Finch writes at the top of its handler, and
-read the per-stage deltas off `~/.finch.log`.
+on 2026-10-20. Every real click adds a line with per-stage deltas to
+`~/.finch.log`, which is better data than synthetic `open` calls and opens no
+windows.
 
 ## The answer
 

@@ -1,247 +1,93 @@
 # Finch
 
-A tiny, fast macOS browser router. Set it as your default browser; it routes
-each URL to the right browser based on rules in `~/.finch.js`.
+A macOS browser router that is fast at one thing: sending each link to the
+right Chrome profile, or the right app, in milliseconds.
 
-- **~900 LOC** Swift (code only; `make loc`) + a 1.5KB embedded JS URL polyfill
-- **~5µs** hot-path latency on the common case (well under perceptible)
-- Native `JavaScriptCore`, no bundler, no transpiler, no Electron
-- Config is real JavaScript — simple cases look like data, full power available
+Finch registers as the default browser. Every `http`, `https` and `mailto`
+link goes through the rules in `~/.finch.js`, then on to a browser or app.
+Routing takes about 5µs. Opening a link in a Chrome profile that is already
+running takes 3–40ms end to end, against the ~110ms to several seconds that
+other routers spend starting a second Chrome process to carry the
+`--profile-directory` flag. [docs/latency.md](docs/latency.md) has the
+measurements and how it is done.
 
-> **This is a personal fork** ([`zamai/finch`](https://github.com/zamai/finch)) of
-> [`expelledboy/finch`](https://github.com/expelledboy/finch). It adds per-route
-> latency tracing and delivers Chrome `--profile-directory` arguments down
-> Chromium's singleton socket, so switching profiles costs milliseconds instead
-> of a second browser process — see [docs/latency.md](docs/latency.md). The
-> Homebrew cask below installs upstream, without these changes; build this fork
-> with `make install`.
-
-## Why
-
-Existing macOS browser pickers either lack power (Browserosaurus, Bumpr) or
-carry significant complexity (Finicky ships ~2,900 LOC plus a Babel/esbuild/goja
-config pipeline). Finch keeps the powerful parts of Finicky's design (graduated
-match types, opener context, URL rewriting) but compiles config helpers to
-native Swift code so the hot path stays in Swift, not JS.
-
-## How Finch compares
-
-|                          | **Finch**     | Finicky    | Velja  | Choosy | Browserosaurus |
-|--------------------------|---------------|------------|--------|--------|----------------|
-| Source LOC               | **~900**      | ~2,900     | closed | closed | ~4,200         |
-| Hot-path latency         | **~5 µs**     | unknown    | —      | —      | —              |
-| Memory footprint         | ~17 MB        | ~30 MB     | —      | —      | ~150 MB        |
-| Programmable rules       | ✅            | ✅         | 🚧 URL only | ❌     | ❌             |
-| Modern ES2020+ in config | ✅            | ❌ (ES5.1) | —      | —      | —              |
-| Caller app routing       | ✅            | ✅         | ✅     | ✅     | ❌             |
-| URL rewriting            | ✅            | ✅         | ✅     | ❌     | ❌             |
-| Tracking-strip helper    | ✅            | 🚧 manual  | ✅     | ❌     | ❌             |
-| Bundler / transpiler     | none          | Babel + esbuild + goja | — | — | Vite + Forge |
-| Open source              | ✅ MIT        | ✅ MIT     | ❌     | ❌     | ✅ (archived)  |
-| Free                     | ✅            | ✅         | $8     | $10    | ✅             |
-| Actively maintained      | ✅            | ✅         | ✅     | ✅     | ❌ (Aug 2025)  |
-
-Full feature matrix across all 18 alternatives we evaluated:
-[COMPARISON.md](COMPARISON.md). Finch's own implementation status and roadmap:
-[FEATURES.md](FEATURES.md).
+A personal fork of [`expelledboy/finch`](https://github.com/expelledboy/finch),
+trimmed to what one config uses. MIT, see [LICENSE](LICENSE).
 
 ## Install
 
-Requires macOS 13+ and Xcode Command Line Tools (`xcode-select --install`).
-
-**Via Homebrew** (recommended):
+Needs macOS 13+ and the Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
-brew install --cask expelledboy/finch/finch
+git clone https://github.com/zamai/finch && cd finch
+make install    # build, copy to /Applications, register, launch
 ```
 
-The cask builds from source on your machine — no Developer ID needed, no
-Gatekeeper warnings. See [docs/homebrew.md](docs/homebrew.md) for how the
-distribution works and the release process.
-
-**From source:**
-
-```sh
-git clone https://github.com/zamai/finch
-cd finch
-make install   # builds, copies to /Applications, registers, launches
-```
-
-`make run` launches the repo's copy in place instead — handy while iterating,
-but LaunchServices then routes URLs to it rather than to `/Applications`.
-
-Then launch Finch (🐦 in your menu bar), open **System Settings → Desktop &
-Dock → Default web browser** and select Finch. Edit `~/.finch.js` to define
-your rules — see [`examples/finch.example.js`](examples/finch.example.js).
-
-Finch handles `http`, `https`, and `mailto` URLs only — it deliberately does
-not register as a viewer for local HTML files. `open foo.html` is a separate
-LaunchServices binding (`public.html`) that routes to whatever app you've
-chosen via Finder → Get Info → "Open with… → Change All", or programmatically
-with [`duti`](https://github.com/moretension/duti):
-
-```sh
-brew install duti
-duti -s app.zen-browser.zen public.html  all   # replace with your bundle id
-duti -s app.zen-browser.zen public.xhtml all
-```
+Then **System Settings → Desktop & Dock → Default web browser → Finch**. Finch
+has no window and no Dock icon, only 🐦 in the menu bar.
 
 ## Configuration
 
-Drop a JavaScript file at `~/.finch.js`. See [`examples/finch.example.js`](examples/finch.example.js).
+`~/.finch.js` is JavaScript evaluated by JavaScriptCore:
 
 ```js
 module.exports = {
-  default: "zen",
+  default: "chrome",                         // when no rule matches
 
-  browsers: {
-    zen:    "app.zen-browser.zen",
-    prisma: "com.talon-sec.Work",
-    chrome: { id: "com.google.Chrome", args: ["--profile-directory=Work"] },
-    // `dataDir` is only needed for a Chromium browser Finch does not know;
-    // see § Configuration.
+  browsers: {                                // name → bundle id or { id, args }
+    chrome: "com.google.Chrome",
+    work:   { id: "com.google.Chrome", args: ["--profile-directory=Profile 1"] },
+    slack:  "com.tinyspeck.slackmacgap",
   },
 
-  // All matching rewrites apply, in order
-  rewrite: [
-    strip("utm_*", "fbclid", "gclid"),
+  rewrite: [                                 // every matching rewrite applies, in order
+    { match: /^https:\/\/discord\.com\//, url: (href) => href.replace(/^https/, "discord") },
   ],
 
-  // First matching rule wins
-  rules: [
-    { match: domain("paymentology.atlassian.net", "datadoghq.com", "zoom.us"),
-      open: "prisma" },
-
-    { match: /github\.com\/(paymentology|tutuka)\//, open: "prisma" },
-
-    // Full power: any predicate function works
-    { match: (url, ctx) => ctx.modifiers.option, open: "zen" },
+  rules: [                                   // first match wins, on the rewritten URL
+    { match: /^slack:/, open: "slack" },
+    { match: domain("github.com", "atlassian.net"), open: "work" },
   ],
 };
 ```
 
-### Match types
-
-| Syntax | Matches | Notes |
-|---|---|---|
-| `"example.com"` | hostname, exactly or as subdomain | Most common — bare strings are hostname patterns, not full URLs |
-| `domain("a.com", "b.com")` | any of these hostnames | Compiled to a single fast check |
-| `from("com.tinyspeck.slackmacgap")` | URL was opened by this app | Caller bundle ID |
-| `running("us.zoom.xos")` | this app is currently running | |
-| `/regex/` | regex against full URL | For path-specific rules |
-| `(url, ctx) => bool` | anything | Slow path (~5µs extra), full power |
-
-The `ctx` argument has `ctx.url`, `ctx.opener.bundleId`, and `ctx.modifiers.{shift,option,command,control}`.
-
-### Browser targets
-
-| Syntax | Means |
+| `match` | Matches |
 |---|---|
-| `"zen"` | Look up `zen` in `browsers` dict |
-| `"app.zen-browser.zen"` | Direct bundle ID |
-| `{ id: "com.google.Chrome", args: ["--incognito"] }` | Bundle ID with launch args |
-| `{ id: "…", args: […], dataDir: "Google/Chrome" }` | Launch args, with the browser's user data directory named explicitly |
-| `(url, ctx) => "zen"` | Dynamic target |
-| `null` | Suppress — do nothing |
+| `"example.com"` | that host or any subdomain |
+| `domain("a.com", "b.com")` | any of those hosts or their subdomains |
+| `/regex/` | the full URL, case-insensitive |
+| `[…]` | any of the above |
 
-**On `args` and Chromium profiles.** macOS drops launch arguments when the
-target app is already running, so `--profile-directory` cannot reach a live
-Chrome through LaunchServices. Finch delivers it over the browser's own
-process-singleton socket instead, which is why a profile-routed link costs
-milliseconds rather than the ~110ms a second browser process would take —
-[docs/latency.md](docs/latency.md) has the measurements. Finding that socket
-needs to know the browser's user data directory; the mainstream Chromium
-browsers are built in, and `dataDir` (relative to `~/Library/Application
-Support`) names it for anything else. Get it wrong, or leave it out for an
-unrecognised browser, and the link still opens — it just takes the slow path.
+`open` and `default` take a name from `browsers` or a bare bundle id. A
+rewrite's `url` is a function from the URL string to a new one, and `URL` is
+available inside it for parsing.
 
-### Rewrite rules
+Anything else is rejected when the config loads, with the offending rule named
+in `~/.finch.log`, so a typo cannot quietly send links to the wrong profile. If
+a reload is rejected the previous config keeps running. If no config has
+loaded since launch, links go to Safari rather than nowhere.
 
-| Syntax | Effect |
-|---|---|
-| `strip("utm_*", "fbclid")` | Remove these query params (supports `*` suffix) |
-| `{ match: ..., url: "..." }` | Replace URL when match hits |
-| `{ match: ..., url: (u, ctx) => ... }` | Transform URL via JS |
+Reload after editing: menu bar → **Reload Config**, or
+`kill -HUP $(pgrep -f Finch.app/Contents/MacOS/Finch)`.
 
-A `URL` constructor is available inside predicates and rewrites for parsing.
+## Seeing what happened
+
+- **Menu bar:** the last 10 links, with where each went and how long it took.
+  Click one to copy its URL.
+- **`~/.finch.log`:** one line per link with per-stage timings, the sending
+  app and the path taken (`via=socket`, `open`, `launch`, `relay`), plus
+  config loads and errors. URLs are not written. `make trace` streams the
+  same lines live.
 
 ## Commands
 
 ```sh
-make build                          # build Finch.app
-make run                            # build + register + launch
-make test URL="https://..."         # dry-run a URL through the rules
-make clean
+make install                  # build and replace /Applications/Finch.app
+make test URL="https://…"     # which browser a URL resolves to; opens nothing
+make trace                    # stream the route log
+make loc                      # code lines, comments excluded
 ```
 
-To reload config after editing `~/.finch.js`:
-
-```sh
-kill -HUP $(pgrep -f Finch.app/Contents/MacOS/Finch)
-```
-
-Or use the menu bar icon → Reload Config.
-
-The binary also has `--bench N <url>` for in-process resolve benchmarking.
-
-## Reviewing what got routed
-
-Click the 🐦 menu bar icon: the top section lists the last 10 links Finch
-routed, most recent first, as `host/path → Browser`. Hover for the full URL, the
-app the link came from, and the pre-rewrite URL if a rewrite rule changed it;
-click to copy the URL. A link suppressed by `open: null` shows as `→ blocked`.
-
-The opener shown on hover is the bundle id of the sending app, read from the
-Apple Event's sender pid — the same value `from()` rules match on. A sender that
-is not an app shows its executable name instead (`osascript`), and it is blank
-when the sender cannot be resolved, which in practice means the `open`
-command-line tool: it exits before Finch can look up the process.
-
-This list is in memory only. Nothing is written to disk, and it dies with the
-process — it exists to answer "where did that link just go?", not to keep a
-browsing history.
-
-## Performance
-
-Measured on Apple Silicon, macOS 15, release build, 100k iterations.
-
-| Path | Latency |
-|---|---|
-| Default fallback (no rule match) | 5.2µs |
-| `domain()` match | 5.4µs |
-| Subdomain match | 4.9µs |
-| Regex match | 4.5µs |
-| Tracking strip + match | 8.7µs |
-| User function predicate | ~10µs |
-
-For comparison: macOS dispatching the Apple Event from the originating app to
-Finch takes ~1–5ms. Finch's contribution to click-to-browser latency is in the
-noise.
-
-The trick: `domain()`, `from()`, `strip()` etc. return marker objects like
-`{__type: "domain", hosts: [...]}` that Swift recognizes at config load and
-compiles to native `NSRegularExpression` / `Set<String>`. The Swift→JS bridge
-is only crossed for user-written `(url, ctx) => ...` predicates.
-
-## Architecture
-
-Code lines per file, comments excluded (`make loc` for the total):
-
-| File | Code | Responsibility |
-|---|---|---|
-| `Sources/Finch/main.swift` | 5 | Bootstrap |
-| `Sources/Finch/AppDelegate.swift` | 280 | Apple Event handler, hot path entry, browser launch, menu bar |
-| `Sources/Finch/Loader.swift` | 33 | Read `~/.finch.js`, evaluate via JavaScriptCore, return module.exports |
-| `Sources/Finch/Helpers.swift` | 68 | Embedded JS prelude: URL polyfill + `domain`/`from`/`strip`/`running` helpers |
-| `Sources/Finch/Engine.swift` | 349 | Marker compilation + native hot-path resolver |
-| `Sources/Finch/Recents.swift` | 29 | In-memory list of recent routes for the menu bar |
-| `Sources/Finch/Trace.swift` | 72 | Per-route latency trace to `~/.finch.log` and `os_log` |
-| `Sources/Finch/Singleton.swift` | 59 | Chromium's process-singleton protocol, so profile args skip a browser process |
-
-Why it is shaped this way — the decisions, the non-goals and the macOS
-behaviour the bundle depends on — is in
-[docs/architecture.md](docs/architecture.md).
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+`Finch --bench <n> <url>` times `n` resolves in-process.
+`FINCH_CONFIG=<path>` points `--test` and `--bench` at a config other than
+`~/.finch.js`.
