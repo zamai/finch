@@ -2,6 +2,11 @@
 
 How Finch ships to users via Homebrew, and how to maintain it.
 
+> **This describes upstream's distribution.** This repository is the personal
+> fork `zamai/finch`; it is not tagged, released or packaged. `brew install
+> --cask expelledboy/finch/finch` installs upstream into `/Applications/Finch.app`
+> and replaces a fork build there. Install the fork with `make install`.
+
 ## The two-repo setup
 
 | Repo | Purpose |

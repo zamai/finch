@@ -8,6 +8,14 @@ each URL to the right browser based on rules in `~/.finch.js`.
 - Native `JavaScriptCore`, no bundler, no transpiler, no Electron
 - Config is real JavaScript — simple cases look like data, full power available
 
+> **This is a personal fork** ([`zamai/finch`](https://github.com/zamai/finch)) of
+> [`expelledboy/finch`](https://github.com/expelledboy/finch). It adds per-route
+> latency tracing and delivers Chrome `--profile-directory` arguments down
+> Chromium's singleton socket, so switching profiles costs milliseconds instead
+> of a second browser process — see [docs/latency.md](docs/latency.md). The
+> Homebrew cask below installs upstream, without these changes; build this fork
+> with `make install`.
+
 ## Why
 
 Existing macOS browser pickers either lack power (Browserosaurus, Bumpr) or
@@ -54,10 +62,13 @@ distribution works and the release process.
 **From source:**
 
 ```sh
-git clone https://github.com/expelledboy/finch
+git clone https://github.com/zamai/finch
 cd finch
-make run
+make install   # builds, copies to /Applications, registers, launches
 ```
+
+`make run` launches the repo's copy in place instead — handy while iterating,
+but LaunchServices then routes URLs to it rather than to `/Applications`.
 
 Then launch Finch (🐦 in your menu bar), open **System Settings → Desktop &
 Dock → Default web browser** and select Finch. Edit `~/.finch.js` to define
