@@ -126,6 +126,36 @@ Left as it is, deliberately. The 390ms only happens on the first Meet link while
 no Meet window is open, it is an order of magnitude smaller than the worst case
 the socket removed, and both alternatives trade away the PWA to buy it.
 
+## A profile link sometimes opens a new window: Chrome's choice, not Finch's
+
+Seen 2026-10-26: a Telegram link routed to Profile 1 `via=socket` landed in the
+right profile, but in a new window beside an existing Profile 1 window. The
+Google Meet PWA, also Profile 1, was running.
+
+Chrome has two paths for an incoming URL, and they choose the window
+differently (`chromium/chromium`, main, read 2026-10-26):
+
+| Path | Who uses it | Window chosen |
+|---|---|---|
+| Apple Event (`app_controller_mac.mm`, `OpenStartupTabsInBrowserWithProfile`) | a plain `NSWorkspace.open`: Finch's no-args path, and Chrome as default browser | `FindTabbedBrowser()` — commented *"not in PWA/app windows which cannot accept new tabs"* |
+| Command line (`startup_browser_creator_impl.cc`, `GetExistingBrowserForOpenBehavior`) | anything carrying `--profile-directory`: the singleton socket, the relay, every other router | the profile's **last active window of any type**; if that is not a normal tabbed window, `OpenTabsInBrowser` creates a new one |
+
+So whenever the target profile's most recently focused window is the Meet PWA
+(or a popup or other app window), a profile link opens a new window. The
+socket did not cause this, and the relay it replaced behaves the same way.
+There is no switch to change it: `startup_browser_creator_impl.cc` reads only
+`--new-window`, `--same-tab`, `--open-in-background` and a few unrelated ones.
+The Apple Event path cannot name a profile; it uses Chrome's last profile,
+which `windowDidBecomeMain` sets from any browser window, apps included.
+
+What a fix would need: make a tabbed window of the target profile Chrome's
+last active one before delivering. The profile can be read from the window's
+accessibility title (`… - Google Chrome - Alex (cast.ai)`; Chrome appends the
+profile name when there is more than one), but that needs Accessibility
+permission. With Finch's ad-hoc signature, macOS keys the permission to the
+binary's hash, so it is lost on every `make install`. That needs a stable
+local signing identity first.
+
 ## What is left, and whose cost it is
 
 `pre` — the gap between the click and Finch's handler — measured 65–110ms in
