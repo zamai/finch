@@ -149,7 +149,10 @@ to `GetExistingBrowserForOpenBehavior`, which keeps a normal-windows-only
 filter for Windows and ChromeOS but not for macOS. Brave's tracker has the
 same symptom on Linux with the source comparison
 ([brave/brave-browser#59917](https://github.com/brave/brave-browser/issues/59917),
-open). No upstream crbug or fix was found on 2026-10-26; Chrome here was
+open). The change is `addcbeb32bbe` (Jan 2026, crbug 431671320); `0dfe151ac945`
+(crbug 497494119) restored part of the old behaviour for Windows and ChromeOS
+only. No existing upstream report of this was found on 2026-10-26, and Finch
+keeps its current behaviour until Chrome fixes it; Chrome here was
 156.0.8078.48. Clicking a normal work window before the link avoids it.
 
 There is no switch to change it: `startup_browser_creator_impl.cc` reads only
