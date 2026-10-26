@@ -143,6 +143,15 @@ differently (`chromium/chromium`, main, read 2026-10-26):
 So whenever the target profile's most recently focused window is the Meet PWA
 (or a popup or other app window), a profile link opens a new window. The
 socket did not cause this, and the relay it replaced behaves the same way.
+This is a Chromium regression, not a design choice. Up to M145
+`RestoreOrCreateBrowser` used `chrome::FindTabbedBrowser` here; M146 switched
+to `GetExistingBrowserForOpenBehavior`, which keeps a normal-windows-only
+filter for Windows and ChromeOS but not for macOS. Brave's tracker has the
+same symptom on Linux with the source comparison
+([brave/brave-browser#59917](https://github.com/brave/brave-browser/issues/59917),
+open). No upstream crbug or fix was found on 2026-10-26; Chrome here was
+156.0.8078.48. Clicking a normal work window before the link avoids it.
+
 There is no switch to change it: `startup_browser_creator_impl.cc` reads only
 `--new-window`, `--same-tab`, `--open-in-background` and a few unrelated ones.
 The Apple Event path cannot name a profile; it uses Chrome's last profile,
