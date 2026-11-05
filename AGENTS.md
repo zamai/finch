@@ -57,6 +57,7 @@ Ask before anything that opens a URL.
 |---|---|---|
 | The live routing rules | `~/.finch.js`, a symlink to `~/Code/mac-setup/finch.js` | The spec for what the config must support. Not an example: edit it only when asked |
 | The installed application | `/Applications/Finch.app` | What LaunchServices sends links to. `make install` replaces it |
+| The signing identity | 1Password Agents vault, item `mrypzg7in2kpbv33k26zrxvqly` (key, certificate); App Store Connect API key `snudnovpmg542sng4g27l74tu4` notarizes | `make build` signs with Developer ID only if it is in the login keychain; on a new Mac import it from there |
 | The route log | `~/.finch.log` (rotated at 1MB to `.finch.log.1`) | Timings, sender and path per link, plus config loads and errors. No URLs |
 
 ## Gotchas with no other home

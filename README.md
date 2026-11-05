@@ -46,15 +46,22 @@ yourself. Passing Gatekeeper on another Mac also needs notarization, which
 needs a **Developer ID Application** certificate (paid account; only the
 Account Holder can create one, in the same Xcode menu or at
 developer.apple.com → Certificates). With that certificate installed,
-`make build` picks it and adds a secure timestamp. Then:
+`make build` picks it and adds a secure timestamp. The App Store Connect API
+cannot create this certificate, even with an Admin key (403, Account Holder
+only), but an API key can notarize, and so can an app-specific password.
+Notarization took about 15 minutes the first time.
 
 ```sh
-xcrun notarytool store-credentials finch --apple-id <apple-id> --team-id <team-id>  # once; asks for an app-specific password
 ditto -c -k --keepParent Finch.app Finch.zip
-xcrun notarytool submit Finch.zip --keychain-profile finch --wait
+xcrun notarytool submit Finch.zip --wait --key AuthKey.p8 --key-id <key-id> --issuer <issuer-id>
+# or: notarytool store-credentials finch --apple-id … --team-id …, then --keychain-profile finch
 xcrun stapler staple Finch.app
 spctl --assess -v Finch.app                  # accepted, source=Notarized Developer ID
 ```
+
+Then copy that `Finch.app` into `/Applications` and register it, the way
+`make install` does after its build. Running `make install` instead rebuilds
+and re-signs, and the notarization no longer matches the new binary.
 
 ## Configuration
 
