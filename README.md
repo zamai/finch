@@ -26,6 +26,36 @@ make install    # build, copy to /Applications, register, launch
 Then **System Settings → Desktop & Dock → Default web browser → Finch**. Finch
 has no window and no Dock icon, only 🐦 in the menu bar.
 
+### Signing
+
+`make build` signs with the first valid identity in the login keychain, in this
+order: `Developer ID Application`, `Apple Development`, ad-hoc. A real identity
+also turns on the hardened runtime. The build prints which one it used, and
+`make install SIGN="Apple Development: Name (ID)"` picks one explicitly.
+
+```sh
+security find-identity -v -p codesigning     # what is available
+codesign -dvv /Applications/Finch.app        # what was used: Authority, TeamIdentifier, flags=0x10000(runtime)
+```
+
+To get an identity, sign in to Xcode with your Apple ID (**Settings →
+Accounts**), then **Manage Certificates → + → Apple Development**.
+
+An Apple Development signature is enough for a copy you build and run
+yourself. Passing Gatekeeper on another Mac also needs notarization, which
+needs a **Developer ID Application** certificate (paid account; only the
+Account Holder can create one, in the same Xcode menu or at
+developer.apple.com → Certificates). With that certificate installed,
+`make build` picks it and adds a secure timestamp. Then:
+
+```sh
+xcrun notarytool store-credentials finch --apple-id <apple-id> --team-id <team-id>  # once; asks for an app-specific password
+ditto -c -k --keepParent Finch.app Finch.zip
+xcrun notarytool submit Finch.zip --keychain-profile finch --wait
+xcrun stapler staple Finch.app
+spctl --assess -v Finch.app                  # accepted, source=Notarized Developer ID
+```
+
 ## Configuration
 
 `~/.finch.js` is JavaScript evaluated by JavaScriptCore:

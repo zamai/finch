@@ -23,6 +23,7 @@ repo, add a row. Only point at committed files: `.claude/` is gitignored.
 | change config syntax or what it accepts | `~/.finch.js`, then README.md § Configuration | the live config is the spec: syntax it does not use was removed. Check a change against it with `make test URL=…`, or try another file with `FINCH_CONFIG=<path>` |
 | touch the bundle, URL schemes, or default-browser candidacy | `Info.plist`, then `docs/architecture.md` § Platform behaviour | which schemes Finch claims and why not `public.html`; `LSUIElement`; why `NSUserActivityTypeBrowsingWeb` must stay |
 | build, install or measure | `Makefile` | `install` (the only way to run it), `test URL=…`, `trace`, `loc` |
+| change code signing or notarize | README.md § Signing, then `Makefile` | which identity `make build` picks, the hardened runtime, and the manual Developer ID notarization steps |
 
 ## Source map
 

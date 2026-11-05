@@ -4,6 +4,17 @@ BINARY  = $(BUNDLE)/MacOS/Finch
 
 .PHONY: build install test clean loc trace
 
+# Code-signing identity. Prefers a Developer ID Application certificate, then
+# an Apple Development one, else ad-hoc ("-"). `find-identity -v` lists revoked
+# certificates too, so drop those. Override with `make install SIGN="…"`.
+SIGN ?= $(or $(shell security find-identity -v -p codesigning 2>/dev/null \
+	| grep -v CSSMERR | grep -m1 -o '"Developer ID Application:[^"]*"' | tr -d '"'), \
+	$(shell security find-identity -v -p codesigning 2>/dev/null \
+	| grep -v CSSMERR | grep -m1 -o '"Apple Development:[^"]*"' | tr -d '"'),-)
+# A real identity gets the hardened runtime. Notarization also needs a secure
+# timestamp, which needs the network, so only Developer ID builds ask for one.
+SIGN_FLAGS = $(if $(filter -,$(SIGN)),,--options runtime $(if $(findstring Developer ID,$(SIGN)),--timestamp))
+
 LSREGISTER = /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 
 build:
@@ -11,8 +22,8 @@ build:
 	@mkdir -p $(BUNDLE)/MacOS $(BUNDLE)/Resources
 	@cp .build/release/Finch $(BINARY)
 	@cp Info.plist $(BUNDLE)/Info.plist
-	@codesign --deep --force --sign - $(APP)
-	@echo "Built $(APP)"
+	@codesign --force $(SIGN_FLAGS) --sign "$(SIGN)" $(APP)
+	@echo "Built $(APP), signed by: $(SIGN)"
 
 # Replace the installed copy and register it. There is deliberately no target
 # that registers the repo's own Finch.app: two registered copies fight over
