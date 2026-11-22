@@ -50,20 +50,27 @@ Account Holder can create one, in the same Xcode menu or at
 developer.apple.com → Certificates). With that certificate installed,
 `make build` picks it and adds a secure timestamp. The App Store Connect API
 cannot create this certificate, even with an Admin key (403, Account Holder
-only), but an API key can notarize, and so can an app-specific password.
-Notarization took about 15 minutes the first time.
+only), but an API key can notarize.
 
 ```sh
-ditto -c -k --keepParent Finch.app Finch.zip
-xcrun notarytool submit Finch.zip --wait --key AuthKey.p8 --key-id <key-id> --issuer <issuer-id>
-# or: notarytool store-credentials finch --apple-id … --team-id …, then --keychain-profile finch
-xcrun stapler staple Finch.app
-spctl --assess -v Finch.app                  # accepted, source=Notarized Developer ID
+make release
 ```
 
-Then copy that `Finch.app` into `/Applications` and register it, the way
-`make install` does after its build. Running `make install` instead rebuilds
-and re-signs, and the notarization no longer matches the new binary.
+This builds, notarizes, staples and checks Gatekeeper, and only then replaces
+and restarts `/Applications/Finch.app`. If an earlier step fails, the installed
+copy is left alone. It publishes nothing. Apple has taken from under a minute
+to about 15 minutes.
+
+It needs the [1Password CLI](https://developer.1password.com/docs/cli/) with
+`OP_SERVICE_ACCOUNT_TOKEN` set, and an item with `private_key`, `key_id` and
+`issuer_id` fields. Point `NOTARY_KEY` at it, in the environment or in a
+git-ignored `local.mk` (`NOTARY_KEY = op://<vault>/<item>`).
+`notarytool` only accepts the key as a file, so
+[tools/notarize.py](tools/notarize.py) calls Apple's Notary API and keeps the
+key in memory.
+
+`make install` does not notarize: running it after a release replaces the
+notarized copy with one that is only signed.
 
 ### Icon
 
@@ -131,6 +138,7 @@ Reload after editing: menu bar → **Reload Config**, or
 
 ```sh
 make install                  # build and replace /Applications/Finch.app
+make release                  # the same, notarized (needs Developer ID and 1Password)
 make test URL="https://…"     # which browser a URL resolves to; opens nothing
 make trace                    # stream the route log
 make loc                      # code lines, comments excluded

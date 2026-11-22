@@ -7,3 +7,4 @@ DerivedData/
 *.swp
 .claude/
 Finch.zip
+local.mk
