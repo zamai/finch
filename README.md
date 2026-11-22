@@ -1,5 +1,7 @@
 # Finch
 
+<img src="docs/icon.png" width="128" alt="Finch icon: a finch in a switchboard operator's headset">
+
 A macOS browser router that is fast at one thing: sending each link to the
 right Chrome profile, or the right app, in milliseconds.
 
@@ -62,6 +64,15 @@ spctl --assess -v Finch.app                  # accepted, source=Notarized Develo
 Then copy that `Finch.app` into `/Applications` and register it, the way
 `make install` does after its build. Running `make install` instead rebuilds
 and re-signs, and the notarization no longer matches the new binary.
+
+### Icon
+
+`make build` packages the committed `Resources/AppIcon.icns`. To change it,
+edit the drawing and regenerate both files:
+
+```sh
+swift tools/make-icon.swift Resources/AppIcon.icns docs/icon.png
+```
 
 ## Configuration
 

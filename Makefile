@@ -22,6 +22,7 @@ build:
 	@mkdir -p $(BUNDLE)/MacOS $(BUNDLE)/Resources
 	@cp .build/release/Finch $(BINARY)
 	@cp Info.plist $(BUNDLE)/Info.plist
+	@cp Resources/AppIcon.icns $(BUNDLE)/Resources/AppIcon.icns
 	@codesign --force $(SIGN_FLAGS) --sign "$(SIGN)" $(APP)
 	@echo "Built $(APP), signed by: $(SIGN)"
 
