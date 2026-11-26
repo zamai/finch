@@ -48,19 +48,17 @@ define DEPLOY
 @open /Applications/$(APP)
 endef
 
-install: build
-	$(DEPLOY)
-	@echo "Installed and running /Applications/$(APP)"
+# Replace the installed copy, notarized when this Mac can notarize: a
+# Developer ID identity and NOTARY_KEY=op://<vault>/<item> (environment or
+# local.mk, which git ignores). Without either it installs signed only and says
+# so, which is what a fresh clone gets. A notarization that is tried and fails
+# stops here: nothing in /Applications is touched until Apple and Gatekeeper
+# have both accepted. Stapling overwrites any ticket left from an earlier build.
+CAN_NOTARIZE = $(and $(findstring Developer ID Application:,$(SIGN)),$(NOTARY_KEY))
 
-# A notarized install on this Mac; publishes nothing. It can't depend on
-# `install`, which re-signs and so invalidates the notarization. Stapling
-# overwrites any ticket left from an earlier build. Nothing in /Applications is
-# touched until Apple and Gatekeeper have both accepted.
-release:
-	@case "$(SIGN)" in "Developer ID Application:"*) ;; \
-	*) echo "make release needs a Developer ID Application identity, got: $(SIGN)"; exit 1;; esac
-	@test -n "$(NOTARY_KEY)" || { echo "make release needs NOTARY_KEY=op://<vault>/<item> (environment or local.mk)"; exit 1; }
+install:
 	@$(MAKE) build SIGN="$(SIGN)" || { $(RESTORE); exit 1; }
+ifneq ($(CAN_NOTARIZE),)
 	@trap '$(RESTORE)' EXIT; \
 	$(NOTARIZE) $(APP) "$(NOTARY_KEY)" && \
 	xcrun stapler staple $(APP) && \
@@ -68,6 +66,14 @@ release:
 	spctl --assess --type execute -v $(APP)
 	$(DEPLOY)
 	@echo "Notarized, installed and running /Applications/$(APP)"
+else
+	$(DEPLOY)
+	@echo "Installed and running /Applications/$(APP), signed but NOT notarized"
+	@echo "  (notarizing needs a Developer ID Application identity and NOTARY_KEY; signed by: $(SIGN))"
+endif
+
+# Kept so old habits still work: install already notarizes when it can.
+release: install
 
 # Resolve a URL against the live config and print the result; opens nothing.
 # Runs the bare binary rather than the bundle, so nothing new gets registered.

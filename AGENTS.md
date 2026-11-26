@@ -22,9 +22,9 @@ repo, add a row. Only point at committed files: `.claude/` is gitignored.
 | add config syntax, or ask "why JavaScriptCore", "why marker objects" | `docs/architecture.md` | the goal, why the config surface is deliberately small and enforced, the never-lose-a-link rules, and the macOS behaviour `Info.plist` encodes |
 | change config syntax or what it accepts | `~/.finch.js`, then README.md § Configuration | the live config is the spec: syntax it does not use was removed. Check a change against it with `make test URL=…`, or try another file with `FINCH_CONFIG=<path>` |
 | touch the bundle, URL schemes, or default-browser candidacy | `Info.plist`, then `docs/architecture.md` § Platform behaviour | which schemes Finch claims, why not `public.html`, and how local HTML files reach Finch anyway; `LSUIElement`; why `NSUserActivityTypeBrowsingWeb` must stay |
-| build, install or measure | `Makefile` | `install` and `release` (the only ways to run it), `test URL=…`, `trace`, `loc` |
+| build, install or measure | `Makefile` | `install` (the only way to run it; `release` is an alias), `test URL=…`, `trace`, `loc` |
 | change the app icon | `tools/make-icon.swift`, then README.md § Icon | the drawing is the source of `Resources/AppIcon.icns` and `docs/icon.png`; why the icns has no 16 or 32 px sizes |
-| change code signing or notarize | README.md § Signing, then `Makefile` and `tools/notarize.py` | which identity `make build` picks, the hardened runtime, why notarization skips `notarytool`. `make release` is a notarized local install, not a published release |
+| change code signing or notarize | README.md § Signing, then `Makefile` and `tools/notarize.py` | which identity `make build` picks, the hardened runtime, why notarization skips `notarytool`. `make install` notarizes when Developer ID and `NOTARY_KEY` are present (minutes per run); it is a local install, never a published release |
 
 ## Source map
 
@@ -57,7 +57,7 @@ Ask before anything that opens a URL.
 | What | Where | Why it matters |
 |---|---|---|
 | The live routing rules | `~/.finch.js`, a symlink to `~/Code/mac-setup/finch.js` | The spec for what the config must support. Not an example: edit it only when asked |
-| The installed application | `/Applications/Finch.app` | What LaunchServices sends links to. `make install` replaces it, and drops its notarization; `make release` keeps it notarized |
+| The installed application | `/Applications/Finch.app` | What LaunchServices sends links to. `make install` replaces it with a notarized copy when this Mac can notarize, else a signed-only one and says so |
 | The signing identity | 1Password Agents vault, item `mrypzg7in2kpbv33k26zrxvqly` (key, certificate); App Store Connect API key `snudnovpmg542sng4g27l74tu4` notarizes | `make build` signs with Developer ID only if it is in the login keychain; on a new Mac import it from there |
 | The route log | `~/.finch.log` (rotated at 1MB to `.finch.log.1`) | Timings, sender and path per link, plus config loads and errors. No URLs |
 

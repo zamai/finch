@@ -22,7 +22,7 @@ Needs macOS 13+ and the Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
 git clone https://github.com/zamai/finch && cd finch
-make install    # build, copy to /Applications, register, launch
+make install    # build, notarize if set up, copy to /Applications, register, launch
 ```
 
 Then **System Settings → Desktop & Dock → Default web browser → Finch**. Finch
@@ -52,25 +52,20 @@ developer.apple.com → Certificates). With that certificate installed,
 cannot create this certificate, even with an Admin key (403, Account Holder
 only), but an API key can notarize.
 
-```sh
-make release
-```
+With that identity and `NOTARY_KEY` (below) in place, `make install` builds,
+notarizes, staples and checks Gatekeeper, and only then replaces and restarts
+`/Applications/Finch.app`. If an earlier step fails, the installed copy is left
+alone. It publishes nothing. Apple has taken from under a minute to about 15
+minutes. Without them, `make install` installs a signed copy and prints that it
+is not notarized. `make release` is an alias.
 
-This builds, notarizes, staples and checks Gatekeeper, and only then replaces
-and restarts `/Applications/Finch.app`. If an earlier step fails, the installed
-copy is left alone. It publishes nothing. Apple has taken from under a minute
-to about 15 minutes.
-
-It needs the [1Password CLI](https://developer.1password.com/docs/cli/) with
+Notarizing needs the [1Password CLI](https://developer.1password.com/docs/cli/) with
 `OP_SERVICE_ACCOUNT_TOKEN` set, and an item with `private_key`, `key_id` and
 `issuer_id` fields. Point `NOTARY_KEY` at it, in the environment or in a
 git-ignored `local.mk` (`NOTARY_KEY = op://<vault>/<item>`).
 `notarytool` only accepts the key as a file, so
 [tools/notarize.py](tools/notarize.py) calls Apple's Notary API and keeps the
 key in memory.
-
-`make install` does not notarize: running it after a release replaces the
-notarized copy with one that is only signed.
 
 ### Icon
 
@@ -137,8 +132,7 @@ Reload after editing: menu bar → **Reload Config**, or
 ## Commands
 
 ```sh
-make install                  # build and replace /Applications/Finch.app
-make release                  # the same, notarized (needs Developer ID and 1Password)
+make install                  # build, notarize if set up, replace /Applications/Finch.app
 make test URL="https://…"     # which browser a URL resolves to; opens nothing
 make trace                    # stream the route log
 make loc                      # code lines, comments excluded
