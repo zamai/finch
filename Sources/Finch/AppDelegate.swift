@@ -61,17 +61,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Hot path
 
     @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
-        let trace = RouteTrace()
         guard let raw = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue else { return }
+        route(raw, event: event)
+    }
 
+    /// Local files (`odoc`), such as an `.html` file opened from Finder, an
+    /// editor or `open foo.html`. Finch claims no document types, but picking a
+    /// default browser in System Settings binds `public.html` to it anyway, and
+    /// without this AppKit answers with "Finch cannot open files in the 'HTML
+    /// text' format". A `file://` URL routes like any link, so it lands in the
+    /// config's default browser. Links never come through here: the `GURL`
+    /// handler above replaces AppKit's, so this only ever sees files.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        // A cold launch by a file delivers it before applicationDidFinishLaunching
+        // has loaded the config; load it now rather than send it to Safari.
+        if engine == nil { reloadEngine() }
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        for url in urls { route(url.absoluteString, event: event) }
+    }
+
+    private func route(_ raw: String, event: NSAppleEventDescriptor?) {
+        let trace = RouteTrace()
         let result = engine?.resolve(raw) ?? Resolution(browser: Self.fallback, url: raw)
         if engine == nil { trace.note = "no config loaded" }
         trace.mark("resolve")
         // Not used for routing — it says which app a slow link came from. The
         // bundle id where there is one, else the executable name, so a non-app
         // sender reads as "osascript" rather than an unexplained blank.
-        let opener = openerBundleId(from: event)
-        let from = opener.isEmpty ? senderExecutableName(from: event) : opener
+        let opener = event.map(openerBundleId(from:)) ?? ""
+        let from = opener.isEmpty ? (event.map(senderExecutableName(from:)) ?? "") : opener
         trace.mark("opener")
         let id = RouteHistory.shared.record(opener: from,
                                original: raw,

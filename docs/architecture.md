@@ -51,8 +51,17 @@ also claim the HTML *document type*, which made `open foo.html` fail with
 "Finch cannot open files in the 'HTML Document' format" — Finch is a router, it
 has no renderer. Dropping that claim in v0.1.1 fixed the dialog and did not
 affect default-browser candidacy, because the two come from different plist
-keys. Opening local HTML files is a separate binding the user owns, via Finder's
-"Open with → Change All" or `duti -s <bundle id> public.html all`.
+keys.
+
+**Picking a default browser in System Settings binds `public.html` to it
+anyway.** The picker writes `public.html` and `com.apple.default-app.web-browser`
+handlers alongside `http`/`https`, whatever the app declares. So local HTML files
+still arrive at Finch as `odoc` events, and AppKit, finding no document types,
+put the same "cannot open files in the 'HTML text' format" dialog back.
+`application(_:open:)` in `AppDelegate.swift` now takes those files and routes
+each `file://` URL like a link, which sends it to the config's default browser.
+Still no `CFBundleDocumentTypes`: the delegate method is enough, and declaring
+types would add Finch to every "Open with" menu.
 
 **A stale handler preference survives a Launch Services database rebuild.**
 Launch Services is the macOS subsystem that decides which app opens a given URL
